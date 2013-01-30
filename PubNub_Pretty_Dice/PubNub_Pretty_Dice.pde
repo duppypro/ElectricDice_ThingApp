@@ -11,7 +11,7 @@
 // Adapted from Tom Igoe's public domain Graphing sketch 
 // Adaptations by David Proctor (@duppy) also in the public domain.
 // Created 2012-04-01 by David Proctor
-// Updated 2012-07-30 by David Proctor
+// Updated 2013-01-30 by David Proctor
 
 import processing.serial.*;
 Serial myPort;        // The serial port
@@ -263,9 +263,10 @@ void serialEvent (Serial myPort) {
 //  print("RAW:"); print(rawString);
   String[] nums = splitTokens(rawString);
 
+print(nums[0]);
+
   if (nums[0].equals("OK")) {
     diceId = int(nums[1]) - diceIdMin;
-    print(diceId);
     lastSerialMsg[diceId] = millis();
    
     for (int i = 0; i < 3; i = i+1) {
@@ -306,6 +307,8 @@ void serialEvent (Serial myPort) {
 //    print(" Mag:" + nfp(inPVMag[diceId], 4));
 //    print(" <" + nfp(inXYZ[0],3) +","+ nfp(inXYZ[1],3) +","+ nfp(inXYZ[2],3) + ">");
 
+  } else {
+    print("?");
   }
 }
 
