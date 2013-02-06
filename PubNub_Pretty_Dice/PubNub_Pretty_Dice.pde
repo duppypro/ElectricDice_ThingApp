@@ -110,7 +110,8 @@ void setup () {
   
   pubNubDiceId[0] = "J10100000001";  // nodeId 6
   pubNubDiceId[1] = "S10100000003";  // nodeId 7
-  pubNubDiceId[2] = "S10100000004";  // nodeId 8
+//  pubNubDiceId[2] = "S10100000004";  // nodeId 8 (broken wire)
+  pubNubDiceId[2] = "N10100000001";  // nodeId 8 (temporary send random values)
   pubNubDiceId[3] = "S10100000005";  // nodeId 9
   pubNubDiceId[4] = "S10100000006";  // nodeId 10
 

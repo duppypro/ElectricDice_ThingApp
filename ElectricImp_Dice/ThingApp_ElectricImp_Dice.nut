@@ -1,62 +1,55 @@
 // Modified to read one button on pin 1
 
-local rolled1 = OutputPort("Rolled A 1", "string");
-local rolled2 = OutputPort("Rolled A 2", "string");
-local rolled3 = OutputPort("Rolled A 3", "string");
-local rolled4 = OutputPort("Rolled A 4", "string");
-local rolled5 = OutputPort("Rolled A 5", "string");
-local rolled6 = OutputPort("Rolled A 6", "string");
-local shake = OutputPort("Shaking", "string");
-local pubnubOutputPort = OutputPort("pubnub_dieID_dieValue", "string");
+local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string");
+local dieID = "S10100000004";
+local wasButtonPressed = 1; // stay alive on boot as if button was pressed
+local sleepforTimeout = 10.0; // seconds with no activity before calling server.sleepfor
+
+function roll(dieValue) {
+    local logMsg;
+    logMsg = dieID + "," + dieValue;
+    // Planner will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
+    webscriptioOutputPort.set(logMsg);
+    server.log(logMsg);
+    server.show(logMsg);
+}
 
 function eventButton()
 {
-    local roll;
-    local buttonState;
-    local logMsg;
-    // imp.sleep(0.050);
-    // use imp.wakeup()
-    // for hibernate use server.sleepfor()
-    buttonState = hardware.pin1.read();
-    server.log("buttonState === " + buttonState);
-    roll = math.rand() % 8 + 1;
-    if (roll <= 6) {
-        logMsg = "{\"roll\":\"" + roll + "\"}";
+    if (hardware.pin1.read() == 1) {  // FIXME: Experimentally there has been no need for debounce.  The neeed may show up with more testing.
+        server.log("    buttonState === 1");
+        roll(math.rand() % 6 + 1); // 1 - 6 for a six sided die
+        wasButtonPressed = 1;
     } else {
-        logMsg = "{\"roll\":\"" + 7 + "\", \"shake\":\"1000\"}";
-    }
-    if (buttonState == 1) {
-        server.log(logMsg)
-        if (roll == 1) {
-            rolled1.set(1);
-        } else if (roll == 2) {
-            rolled2.set(2);
-        } else if (roll == 3) {
-            rolled3.set(3);
-        } else if (roll == 4) {
-            rolled4.set(4);
-        } else if (roll == 5) {
-            rolled5.set(5);
-        } else if (roll == 6) {
-            rolled6.set(6);
-        } else {
-            shake.set(7);
-        }    
-        server.show(logMsg);
+        server.log("    buttonState === 0");
     }
 }
 
-hardware.pin1.configure(DIGITAL_IN_PULLUP,eventButton);
+function checkActivity()
+{
+    server.log("checkActivity();")
+    if (wasButtonPressed == 1) {
+        imp.wakeup(sleepforTimeout, checkActivity);
+    } else {
+        imp.onidle(function() { server.sleepfor(3600); });  // go to deepsleep if button not pressed for a while
+    }
+    wasButtonPressed = 0;
+}
+
+// Configure pin1 for wakeup with internal pull down.  Connect hardware button from pin1 to VCC
+hardware.pin1.configure(DIGITAL_IN_WAKEUP,eventButton);
 
 // Register with the server
-imp.configure("Button to HTTP GET", [], [rolled1, rolled2, rolled3, rolled4, rolled5, rolled6, shake]);
+imp.configure("Button to HTTP GET", [], [webscriptioOutputPort]);
 
-server.log(">>> Booted BigRedButton v00.01");
+// Send status to know we are alive
+server.log(">>> Booted BigRedButton v00.01.20120205a");
+
 server.log(">>> impee id==" + hardware.getimpeeid());
 server.log(">>> impee MAC==" + imp.getmacaddress());
 server.show("Press the Big Red Button");
-server.show("on id " + hardware.getimpeeid());
+
+imp.wakeup(sleepforTimeout, checkActivity);
 
 // No more code to execute so we'll sleep until eventButton() occurs
-
 // End of code.
