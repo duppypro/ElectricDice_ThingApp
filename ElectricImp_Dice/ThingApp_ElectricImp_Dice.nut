@@ -1,102 +1,105 @@
 /* Electric Dice using MM8452 accelerometer */
 
-local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string");
-local dieID = "I10100000001";
-local wasActive = true; // stay alive on boot as if button was pressed or die moved/rolled
-local sleepforTimeout = 7000.0; // seconds with no activity before calling server.sleepfor
-local sleepforDuration = 5 * 60; // seconds to stay in deep sleep (wakeup is a reboot)
+local versionString = "MMA8452 Dice v00.01.2013.02.27a"
+local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string")
+local dieID = "I10100000001"
+local wasActive = true // stay alive on boot as if button was pressed or die moved/rolled
+local sleepforTimeout = 7.0 // seconds with no activity before calling server.sleepfor
+local sleepforDuration = (5 * 60) // seconds to stay in deep sleep (wakeup is a reboot)
 
 ///////////////////////////////////////////////
 // constants for MMA8452 i2cregisters
-local OUT_X_MSB = 0x01
+local OUT_X_MSB     = 0x01
 local XYZ_DATA_CFG  = 0x0E
-local WHO_AM_I   = 0x0D
-local CTRL_REG1  = 0x2A
-local GSCALE = 2 
-local i2c = hardware.i2c89; // now can use i2c.read... instead of hardware.i2c89.read...
+local WHO_AM_I      = 0x0D
+local CTRL_REG1     = 0x2A
+local GSCALE        = 2 
+local i2c = hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
 // the slave address for this device is set in hardware. Creating a variable to save it here is helpful.
 // The SparkFun breakout board defaults to 0x1D, set to 0x1C if SA0 jumper on the bottom of the board is set
-local MMA8452_ADDR = 0x1D << 1; // I am not sure yet why the '<< 1' is needed, but it works.  I copied it from other sample code.
-//local MM8452_ADDR = 0x1C << 1; 
+local MMA8452_ADDR = (0x1D << 1) // I am not sure yet why the '<< 1' is needed, but it works.  I copied it from other sample code.
+//local MM8452_ADDR = (0x1C << 1) // Use this address if SA0 jumper is set. 
 
 ///////////////////////////////////////////////
 //define functions
 function roll(dieValue) {
-    local logMsg;
-    logMsg = dieID + "," + dieValue;
+    local logMsg
+    logMsg = dieID + "," + dieValue
     // Planner will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
-    webscriptioOutputPort.set(logMsg);
-    server.log(logMsg);
-    server.show(logMsg);
+    webscriptioOutputPort.set(logMsg)
+    server.log(logMsg)
+    server.show(logMsg)
 }
 
 function eventButton()
 {
     if (hardware.pin1.read() == 1) {  // FIXME: Experimentally there has been no need for debounce.  The neeed may show up with more testing.
-//        server.log("    buttonState === 1");
-        roll(math.rand() % 6 + 1); // 1 - 6 for a six sided die
-        wasActive = true;
+//        server.log("    buttonState === 1")
+        roll(math.rand() % 6 + 1) // 1 - 6 for a six sided die
+        wasActive = true
     } else {
-//        server.log("    buttonState === 0");
+//        server.log("    buttonState === 0")
     }
 }
 
 function eventInt1()
 {
-    server.log("Interrupt 1 changed.");
+    server.log("Interrupt 1 changed.")
 }
 
 function eventInt2()
 {
-    server.log("Interrupt 2 changed.");
+    server.log("Interrupt 2 changed.")
 }
 
 function checkActivity()
 {
-    server.log("checkActivity();")
+    server.log("checkActivity() every " + sleepforTimeout + " secs.")
     if (wasActive) {
-        wasActive = false;
-        imp.wakeup(sleepforTimeout, checkActivity);
+        wasActive = false
+        imp.wakeup(sleepforTimeout, checkActivity)
     } else {
-        imp.onidle(function() { server.sleepfor(sleepforDuration); });  // go to deepsleep if button not pressed for a while
+        server.log("No activity for " + sleepforTimeout + " to " + sleepforTimeout*2 + " secs.")
+        server.log("Going to deepsleep for " + (sleepforDuration / 60.0) + " minutes.")
+        imp.onidle(function() { server.sleepfor(sleepforDuration) })  // go to deepsleep if button not pressed for a while
     }
 }
 
 // Read a single byte from addressToRead and return it as a byte
 function readReg(addressToRead)
 {
-    return i2c.read(MMA8452_ADDR, format("%c", addressToRead), 1);
+    return i2c.read(MMA8452_ADDR, format("%c", addressToRead), 1)[0]
 }
 
 // Writes a single byte (dataToWrite) into addressToWrite
 function writeReg(addressToWrite, dataToWrite)
 {
-    return i2c.write(MMA8452_ADDR, format("%c%c", addressToRead, dataToWrite));
+    return i2c.write(MMA8452_ADDR, format("%c%c", addressToRead, dataToWrite))
 }
 
 ////////////////////////////////////////////////////////
 // first code starts here
 // Configure pin1 for wakeup with internal pull down.  Connect hardware button from pin1 to VCC
-hardware.pin1.configure(DIGITAL_IN_WAKEUP, eventButton);
-hardware.pin5.configure(DIGITAL_IN_PULLUP, eventInt1); // interrupt 1 from MMA8452
-hardware.pin7.configure(DIGITAL_IN_PULLUP, eventInt2); // interrupt 2 from MMA8452
+hardware.pin1.configure(DIGITAL_IN_WAKEUP, eventButton)
+hardware.pin5.configure(DIGITAL_IN_PULLUP, eventInt1) // interrupt 1 from MMA8452
+hardware.pin7.configure(DIGITAL_IN_PULLUP, eventInt2) // interrupt 2 from MMA8452
 // set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
-hardware.i2c89.configure(CLOCK_SPEED_400_KHZ);
+hardware.i2c89.configure(CLOCK_SPEED_400_KHZ)
 
 // Register with the server
-imp.configure("MMA8452 Dice", [], [webscriptioOutputPort]);
+imp.configure("MMA8452 Dice", [], [webscriptioOutputPort])
 
 // Send status to know we are alive
-server.log(">>> Booted MMA8452 Dice v00.01.2013.02.26c " + hardware.getimpeeid() + "/" + imp.getmacaddress());
+server.log(">>> BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress())
 
 // roll every time we boot just for some idle activity
-roll("boot" + (math.rand() % 6 + 1)); // 1 - 6 for a six sided die
+roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
 
 // Test I2C read WhoAmI from accel
-local whoami = i2c.read(MMA8452_ADDR, format("%c",WHO_AM_I), 1);
-server.log("Who Am I == " + format("0x%0x ", whoami[0]) + whoami);
+local whoami = readReg(WHO_AM_I)
+server.log("Who Am I == " + format("0x%0x", whoami))
 
-imp.wakeup(sleepforTimeout, checkActivity);
+imp.wakeup(sleepforTimeout, checkActivity)
 
 // No more code to execute so we'll sleep until eventButton() occurs
 // End of code.
