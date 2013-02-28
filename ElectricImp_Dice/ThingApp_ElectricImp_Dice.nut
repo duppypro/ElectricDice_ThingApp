@@ -1,18 +1,18 @@
 /* Electric Dice using MM8452 accelerometer */
 
-local versionString = "MMA8452 Dice v00.01.2013.02.27a"
+const versionString = "MMA8452 Dice v00.01.2013.02.27b"
 local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string")
-local dieID = "I10100000001"
 local wasActive = true // stay alive on boot as if button was pressed or die moved/rolled
-local sleepforTimeout = 7.0 // seconds with no activity before calling server.sleepfor
-local sleepforDuration = (5 * 60) // seconds to stay in deep sleep (wakeup is a reboot)
+const sleepforTimeout = 700.0 // seconds with no activity before calling server.sleepfor
+const sleepforDuration = 300 // seconds to stay in deep sleep (wakeup is a reboot)
 
 ///////////////////////////////////////////////
 // constants for MMA8452 i2cregisters
-local OUT_X_MSB     = 0x01
-local XYZ_DATA_CFG  = 0x0E
-local WHO_AM_I      = 0x0D
-local CTRL_REG1     = 0x2A
+const OUT_X_MSB     = 0x01
+const XYZ_DATA_CFG  = 0x0E
+const WHO_AM_I      = 0x0D
+const CTRL_REG1     = 0x2A
+// helper variables for MMA8452. These are not const because they may have reason to change dynamically.
 local GSCALE        = 2 
 local i2c = hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
 // the slave address for this device is set in hardware. Creating a variable to save it here is helpful.
@@ -24,7 +24,7 @@ local MMA8452_ADDR = (0x1D << 1) // I am not sure yet why the '<< 1' is needed, 
 //define functions
 function roll(dieValue) {
     local logMsg
-    logMsg = dieID + "," + dieValue
+    logMsg = imp.configparams.dieID + "," + dieValue
     // Planner will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
     webscriptioOutputPort.set(logMsg)
     server.log(logMsg)
@@ -87,7 +87,8 @@ hardware.pin7.configure(DIGITAL_IN_PULLUP, eventInt2) // interrupt 2 from MMA845
 hardware.i2c89.configure(CLOCK_SPEED_400_KHZ)
 
 // Register with the server
-imp.configure("MMA8452 Dice", [], [webscriptioOutputPort])
+imp.configure("MMA8452 Dice", [], [webscriptioOutputPort], {dieID = "I10100000001"})
+server.log("dieID = " + imp.configparams.dieID)
 
 // Send status to know we are alive
 server.log(">>> BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress())
