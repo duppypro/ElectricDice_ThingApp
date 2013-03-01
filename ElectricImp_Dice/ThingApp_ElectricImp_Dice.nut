@@ -1,11 +1,11 @@
 /* Electric Dice using MM8452 accelerometer */
 
-const versionString = "MMA8452 Dice v00.01.2013.02.28c"
+const versionString = "MMA8452 Dice v00.01.2013-03-01b"
 local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string")
 local wasActive = true // stay alive on boot as if button was pressed or die moved/rolled
 const sleepforTimeout = 77.0 // seconds with no activity before calling server.sleepfor
 const sleepforDuration = 1620 // seconds to stay in deep sleep (wakeup is a reboot)
-local accelSamplePeriod = 1.0/2.0 // seconds between reads of the XYZ accel data
+local accelSamplePeriod = 1.0/8.0 // seconds between reads of the XYZ accel data
 
 ///////////////////////////////////////////////
 // constants for MMA8452 i2cregisters
@@ -70,49 +70,46 @@ function checkActivity()
 // Read a single byte from addressToRead and return it as a byte.  (The '[0]' causes a byte to return)
 function readReg(addressToRead)
 {
-    local r = i2c.read(MMA8452_ADDR << 1, format("%c", addressToRead), 1)[0]
-    server.log(format("    >>>> readReg %0x == %0x", addressToRead, r))
-    return r
+    return i2c.read(MMA8452_ADDR << 1, format("%c", addressToRead), 1)[0]
+//    server.log(format("    >>>> readReg %0x == %0x", addressToRead, r))
+//    return r
 }
 
 // Writes a single byte (dataToWrite) into addressToWrite
 function writeReg(addressToWrite, dataToWrite)
 {
     local err = i2c.write(MMA8452_ADDR << 1, format("%c%c", addressToWrite, dataToWrite))
-    server.log(format("    >>>> writeReg %0x = %0x err:", addressToWrite, dataToWrite) + err)
+//    server.log(format("    >>>> writeReg %0x = %0x err:", addressToWrite, dataToWrite) + err)
 }
 
-// Read numBytes sequentially, starting at addressToRead.  Return array
-function readSequentialRegs(addressToRead, numBytes)
+// Read numBytes sequentially, starting at addressToRead.  write into array dest
+function readSequentialRegs(addressToRead, numBytes, dest)
 {
-    local dest = []
     for(local x = 0; x < numBytes; x += 1){
-        dest[c] = readReg(addressToRead + x)
+        dest[x] = readReg(addressToRead + x)
     }
-    return dest
 }
 
 function readAccelData()
 {
-    local rawData = [] // x/y/z accel register data stored here, 6 bytes
-    local dest = [] // holds 3 12 bit ints
+    local rawData = [0,0,0,0,0,0] // x/y/z accel register data stored here, 6 bytes
+    local dest = [0,0,0] // holds 3 12 bit ints
     local gCount
     
-    rawData = readSequentialRegs(OUT_X_MSB, 6)  // Read the six raw data registers into data array
+    readSequentialRegs(OUT_X_MSB, 6, rawData)  // Read the six raw data registers into data array
 
     // Loop to calculate 12-bit ADC and g value for each axis
-    for(local i = 0; i < 3 ; i++)
+    for(local i = 0; i < 3 ; i += 1)
     {
         gCount = (rawData[i*2] << 8) | rawData[(i*2)+1]  //Combine the two 8 bit registers into one 12-bit number
-        gCount >>= 4 //The registers are left align, here we right align the 12-bit integer
+        gCount = gCount >> 4 //The registers are left align, here we right align the 12-bit integer
 
         // If the number is negative, we have to make it so manually (no 12-bit data type)
         if (rawData[i*2] > 0x7F)
         {  
-            gCount = ~gCount + 1
-            gCount *= -1  // Transform into negative 2's complement #
+            gCount = gCount - 4096
         }
-server.log(gCount)
+//server.log(gCount)
         dest[i] = gCount //Record this gCount into the 3 int array
     }
     return dest
@@ -159,9 +156,11 @@ function initMMA8452()
     MMA8452Active();  // Set to active to start reading
 }
 
-function pollMMA8452(period)
+function pollMMA8452()
 {
-    imp.wakeup(period, pollMMA8452)
+    local xyz = readAccelData()
+    imp.wakeup(accelSamplePeriod, pollMMA8452)
+    server.log(xyz[0] + " " + xyz[1] + " " + xyz[2])
 }
 
 ////////////////////////////////////////////////////////
@@ -184,38 +183,10 @@ server.log(">>> BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" +
 roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
 
 initMMA8452()
-pollMMA8452(accelSamplePeriod)
+
+pollMMA8452()
 
 imp.wakeup(sleepforTimeout, checkActivity)
 
 // No more code to execute so we'll sleep until eventButton() occurs
 // End of code.
-
-/* 
- arduino code example below
- 
-void loop()
-{  
-  int accelCount[3];  // Stores the 12-bit signed value
-  readAccelData(accelCount);  // Read the x/y/z adc values
-
-  // Now we'll calculate the accleration value into actual g's
-  float accelG[3];  // Stores the real accel value in g's
-  for (int i = 0 ; i < 3 ; i++)
-  {
-    accelG[i] = (float) accelCount[i] / ((1<<12)/(2*GSCALE));  // get actual g value, this depends on scale being set
-  }
-
-  // Print out values
-  for (int i = 0 ; i < 3 ; i++)
-  {
-    Serial.print(accelG[i], 4);  // Print g values
-    Serial.print("\t");  // tabs in between axes
-  }
-  Serial.println();
-
-  delay(10);  // Delay here for visibility
-}
-
-
-*/
