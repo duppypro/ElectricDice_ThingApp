@@ -1,10 +1,11 @@
 /* Electric Dice using MM8452 accelerometer */
 
-const versionString = "MMA8452 Dice v00.01.2013.02.27b"
+const versionString = "MMA8452 Dice v00.01.2013.02.28c"
 local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string")
 local wasActive = true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 700.0 // seconds with no activity before calling server.sleepfor
-const sleepforDuration = 300 // seconds to stay in deep sleep (wakeup is a reboot)
+const sleepforTimeout = 77.0 // seconds with no activity before calling server.sleepfor
+const sleepforDuration = 1620 // seconds to stay in deep sleep (wakeup is a reboot)
+local accelSamplePeriod = 1.0/2.0 // seconds between reads of the XYZ accel data
 
 ///////////////////////////////////////////////
 // constants for MMA8452 i2cregisters
@@ -17,8 +18,8 @@ local GSCALE        = 2
 local i2c = hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
 // the slave address for this device is set in hardware. Creating a variable to save it here is helpful.
 // The SparkFun breakout board defaults to 0x1D, set to 0x1C if SA0 jumper on the bottom of the board is set
-local MMA8452_ADDR = (0x1D << 1) // I am not sure yet why the '<< 1' is needed, but it works.  I copied it from other sample code.
-//local MM8452_ADDR = (0x1C << 1) // Use this address if SA0 jumper is set. 
+local MMA8452_ADDR = 0x1D // A '<< 1' is needed.  I add the '<< 1' in the helper functions.  FIXME:  Why is '<< 1' needed?
+//local MM8452_ADDR = 0x1C // Use this address if SA0 jumper is set. 
 
 ///////////////////////////////////////////////
 //define functions
@@ -55,6 +56,7 @@ function eventInt2()
 function checkActivity()
 {
     server.log("checkActivity() every " + sleepforTimeout + " secs.")
+    server.log("V = " + hardware.voltage())
     if (wasActive) {
         wasActive = false
         imp.wakeup(sleepforTimeout, checkActivity)
@@ -65,16 +67,101 @@ function checkActivity()
     }
 }
 
-// Read a single byte from addressToRead and return it as a byte
+// Read a single byte from addressToRead and return it as a byte.  (The '[0]' causes a byte to return)
 function readReg(addressToRead)
 {
-    return i2c.read(MMA8452_ADDR, format("%c", addressToRead), 1)[0]
+    local r = i2c.read(MMA8452_ADDR << 1, format("%c", addressToRead), 1)[0]
+    server.log(format("    >>>> readReg %0x == %0x", addressToRead, r))
+    return r
 }
 
 // Writes a single byte (dataToWrite) into addressToWrite
 function writeReg(addressToWrite, dataToWrite)
 {
-    return i2c.write(MMA8452_ADDR, format("%c%c", addressToRead, dataToWrite))
+    local err = i2c.write(MMA8452_ADDR << 1, format("%c%c", addressToWrite, dataToWrite))
+    server.log(format("    >>>> writeReg %0x = %0x err:", addressToWrite, dataToWrite) + err)
+}
+
+// Read numBytes sequentially, starting at addressToRead.  Return array
+function readSequentialRegs(addressToRead, numBytes)
+{
+    local dest = []
+    for(local x = 0; x < numBytes; x += 1){
+        dest[c] = readReg(addressToRead + x)
+    }
+    return dest
+}
+
+function readAccelData()
+{
+    local rawData = [] // x/y/z accel register data stored here, 6 bytes
+    local dest = [] // holds 3 12 bit ints
+    local gCount
+    
+    rawData = readSequentialRegs(OUT_X_MSB, 6)  // Read the six raw data registers into data array
+
+    // Loop to calculate 12-bit ADC and g value for each axis
+    for(local i = 0; i < 3 ; i++)
+    {
+        gCount = (rawData[i*2] << 8) | rawData[(i*2)+1]  //Combine the two 8 bit registers into one 12-bit number
+        gCount >>= 4 //The registers are left align, here we right align the 12-bit integer
+
+        // If the number is negative, we have to make it so manually (no 12-bit data type)
+        if (rawData[i*2] > 0x7F)
+        {  
+            gCount = ~gCount + 1
+            gCount *= -1  // Transform into negative 2's complement #
+        }
+server.log(gCount)
+        dest[i] = gCount //Record this gCount into the 3 int array
+    }
+    return dest
+}
+
+// Sets the MMA8452 to standby mode. It must be in standby to change most register settings
+function MMA8452Standby()
+{
+  local c = readReg(CTRL_REG1);
+  writeReg(CTRL_REG1, c & ~(0x01)); //Clear the active bit to go into standby
+}
+
+// Sets the MMA8452 to active mode. Needs to be in this mode to output data
+function MMA8452Active()
+{
+  local c = readReg(CTRL_REG1);
+  writeReg(CTRL_REG1, c | 0x01); //Set the active bit to begin detection
+}
+
+// Initialize the MMA8452 registers 
+// See the many application notes for more info on setting all of these registers:
+// http://www.freescale.com/webapp/sps/site/prod_summary.jsp?code=MMA8452Q
+function initMMA8452()
+{
+    local c = readReg(WHO_AM_I);  // Read WHO_AM_I register
+    if (c == 0x2A) // WHO_AM_I should always be 0x2A
+    {  
+        server.log("MMA8452Q is online...")
+    }
+    else
+    {
+        server.log("Could not connect to MMA8452Q: " + format("0x%0x", c))
+        server.error("Could not connect to MMA8452Q: " + format("0x%0x", c))
+    }
+    
+    MMA8452Standby();  // Must be in standby to change registers
+    
+    // Set up the full scale range to 2, 4, or 8g.
+    // use GSCALE >> 2 : Neat trick, see page 22. 00 = 2G, 01 = 4A, 10 = 8G
+    writeReg(XYZ_DATA_CFG, GSCALE >> 2);
+    
+    //The default data rate is 800Hz and we don't modify it in this example code
+    
+    MMA8452Active();  // Set to active to start reading
+}
+
+function pollMMA8452(period)
+{
+    imp.wakeup(period, pollMMA8452)
 }
 
 ////////////////////////////////////////////////////////
@@ -96,9 +183,8 @@ server.log(">>> BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" +
 // roll every time we boot just for some idle activity
 roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
 
-// Test I2C read WhoAmI from accel
-local whoami = readReg(WHO_AM_I)
-server.log("Who Am I == " + format("0x%0x", whoami))
+initMMA8452()
+pollMMA8452(accelSamplePeriod)
 
 imp.wakeup(sleepforTimeout, checkActivity)
 
@@ -131,107 +217,5 @@ void loop()
   delay(10);  // Delay here for visibility
 }
 
-void readAccelData(int *destination)
-{
-  byte rawData[6];  // x/y/z accel register data stored here
 
-  readRegisters(OUT_X_MSB, 6, rawData);  // Read the six raw data registers into data array
-
-  // Loop to calculate 12-bit ADC and g value for each axis
-  for(int i = 0; i < 3 ; i++)
-  {
-    int gCount = (rawData[i*2] << 8) | rawData[(i*2)+1];  //Combine the two 8 bit registers into one 12-bit number
-    gCount >>= 4; //The registers are left align, here we right align the 12-bit integer
-
-    // If the number is negative, we have to make it so manually (no 12-bit data type)
-    if (rawData[i*2] > 0x7F)
-    {  
-      gCount = ~gCount + 1;
-      gCount *= -1;  // Transform into negative 2's complement #
-    }
-
-    destination[i] = gCount; //Record this gCount into the 3 int array
-  }
-}
-
-// Initialize the MMA8452 registers 
-// See the many application notes for more info on setting all of these registers:
-// http://www.freescale.com/webapp/sps/site/prod_summary.jsp?code=MMA8452Q
-void initMMA8452()
-{
-  byte c = readRegister(WHO_AM_I);  // Read WHO_AM_I register
-  if (c == 0x2A) // WHO_AM_I should always be 0x2A
-  {  
-    Serial.println("MMA8452Q is online...");
-  }
-  else
-  {
-    Serial.print("Could not connect to MMA8452Q: 0x");
-    Serial.println(c, HEX);
-    while(1) ; // Loop forever if communication doesn't happen
-  }
-
-  MMA8452Standby();  // Must be in standby to change registers
-
-  // Set up the full scale range to 2, 4, or 8g.
-  byte fsr = GSCALE;
-  if(fsr > 8) fsr = 8; //Easy error check
-  fsr >>= 2; // Neat trick, see page 22. 00 = 2G, 01 = 4A, 10 = 8G
-  writeRegister(XYZ_DATA_CFG, fsr);
-
-  //The default data rate is 800Hz and we don't modify it in this example code
-
-  MMA8452Active();  // Set to active to start reading
-}
-
-// Sets the MMA8452 to standby mode. It must be in standby to change most register settings
-void MMA8452Standby()
-{
-  byte c = readRegister(CTRL_REG1);
-  writeRegister(CTRL_REG1, c & ~(0x01)); //Clear the active bit to go into standby
-}
-
-// Sets the MMA8452 to active mode. Needs to be in this mode to output data
-void MMA8452Active()
-{
-  byte c = readRegister(CTRL_REG1);
-  writeRegister(CTRL_REG1, c | 0x01); //Set the active bit to begin detection
-}
-
-// Read bytesToRead sequentially, starting at addressToRead into the dest byte array
-void readRegisters(byte addressToRead, int bytesToRead, byte * dest)
-{
-  Wire.beginTransmission(MMA8452_ADDRESS);
-  Wire.write(addressToRead);
-  Wire.endTransmission(false); //endTransmission but keep the connection active
-
-  Wire.requestFrom(MMA8452_ADDRESS, bytesToRead); //Ask for bytes, once done, bus is released by default
-
-  while(Wire.available() < bytesToRead); //Hang out until we get the # of bytes we expect
-
-  for(int x = 0 ; x < bytesToRead ; x++)
-    dest[x] = Wire.read();    
-}
-
-// Read a single byte from addressToRead and return it as a byte
-byte readRegister(byte addressToRead)
-{
-  Wire.beginTransmission(MMA8452_ADDRESS);
-  Wire.write(addressToRead);
-  Wire.endTransmission(false); //endTransmission but keep the connection active
-
-  Wire.requestFrom(MMA8452_ADDRESS, 1); //Ask for 1 byte, once done, bus is released by default
-
-  while(!Wire.available()) ; //Wait for the data to come back
-  return Wire.read(); //Return this one byte
-}
-
-// Writes a single byte (dataToWrite) into addressToWrite
-void writeRegister(byte addressToWrite, byte dataToWrite)
-{
-  Wire.beginTransmission(MMA8452_ADDRESS);
-  Wire.write(addressToWrite);
-  Wire.write(dataToWrite);
-  Wire.endTransmission(); //Stop transmitting
-}
 */
