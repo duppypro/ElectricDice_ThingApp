@@ -65,6 +65,8 @@ float now;
 float[] lastSerialMsg = new float[numDice];
 float[] lastRandomTest = new float[numDice];
 float[] lastPub = new float[numDice];
+float testPeriod = 3000; // milliseconds between send test messages (sent during idle)
+float idleTimeout = 15000; // milliseconds of no JeeLink msg recvd before going to idle
 
 int w1, sep;
 int d, w2;
@@ -191,8 +193,8 @@ void draw () {
       oy = sep + w1 + sep;
     }
 
-    if (lastSerialMsg[i] < (now - 15000)) { // If no serial msg received for 15 seconds
-      if (lastRandomTest[i] < (now - 10000) ) { // if no randrom roll in 6 seconds
+    if (lastSerialMsg[i] < (now - idleTimeout)) { // If no serial msg received for 15 seconds
+      if (lastRandomTest[i] < (now - testPeriod) ) { // if no randrom roll in 6 seconds
         lastRandomTest[i] = now;
         diceRoll[i] = "test" + int(random(1,8)); // include 7 as a blank face
         inPVMag[i] = (150 + 330) / 2; // fake idle Mag

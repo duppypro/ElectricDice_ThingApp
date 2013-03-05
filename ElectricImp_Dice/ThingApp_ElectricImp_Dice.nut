@@ -1,11 +1,14 @@
 /* Electric Dice using MMA8452 accelerometer */
 
-const versionString = "MMA8452 Dice v00.01.2013-03-02c"
+const versionString = "MMA8452 Dice v00.01.2013-03-05a"
 local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string")
 local wasActive = true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 7700.0 // seconds with no activity before calling server.sleepfor
+const sleepforTimeout = 3000.0 // seconds with no activity before calling server.sleepfor
 const sleepforDuration = 1620 // seconds to stay in deep sleep (wakeup is a reboot)
-local accelSamplePeriod = 2.0 // seconds between reads of the XYZ accel data
+local accelSamplePeriod = 4.0 // seconds between reads of the XYZ accel data
+local lastAccelData = array(3) // last value to compare change for activity detection
+local minAccelData = array(3)
+local maxAccelData = array(3)
 
 ///////////////////////////////////////////////
 // constants for MMA8452 i2c registers
@@ -124,15 +127,17 @@ function readAccelData()
     rawData = readSequentialRegs(OUT_X_MSB, 6)  // Read the six raw data registers into data array
     if (rawData == null)
         return null
-        
+
     // Loop to calculate 16-bit ADC and g value for each axis
-    for(local i = 0; i < 3 ; i += 1)
-    {
-        dest[i] = (rawData[i*2] << 8) | rawData[(i*2)+1]  //Combine the two 8 bit registers into one 16-bit number
+    local i
+    local val
+    foreach(i, val in dest) {
+        val = (rawData[i*2] << 8) | rawData[(i*2)+1]  //Combine the two 8 bit registers into one 16-bit number
         // Actually the MMA8452 only provides 12bits.  The lowest 4 bits will always be 0.
         // If the number is negative, we have to make it so manually (no 12-bit data type)
-        if (dest[i] >= 32768)
-            dest[i] = dest[i] - 65536
+        if (val >= 32768)
+            val = val - 65536
+        dest[i] = val
     }
     return dest
 }
@@ -177,8 +182,30 @@ function initMMA8452()
 
 function pollMMA8452()
 {
+    local spaces = "                                                                          "
+    local bars   = "##########################################################################"
+    local string = ""
     local xyz = readAccelData()
-    log(xyz[0] + " " + xyz[1] + " " + xyz[2], 50)
+    local len
+    local val
+//    log(xyz[0] + " " + xyz[1] + " " + xyz[2], 50)
+    foreach(val in xyz) {
+        len = val / 1024
+        if (len <= 0) {
+            string += spaces.slice(0,16+len)
+            string += bars.slice(0,-len)
+        } else {
+            string += spaces.slice(0,16)
+        }
+        string += format("%6.0d",val)
+        if (len > 0) {
+            string += bars.slice(0,len)
+            string += spaces.slice(0,16-len)
+        } else{
+            string += spaces.slice(0,16)
+        }
+    }
+    log(string, 10)
     imp.wakeup(accelSamplePeriod, pollMMA8452)
 }
 
