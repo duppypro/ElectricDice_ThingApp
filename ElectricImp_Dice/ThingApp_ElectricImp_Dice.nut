@@ -1,14 +1,40 @@
 /* Electric Dice using MMA8452 accelerometer */
 
-const versionString = "MMA8452 Dice v00.01.2013-03-05a"
+/////////////////////////////////////////////////
+// global constants and variables
+const versionString = "MMA8452 Dice v00.01.2013-03-05c"
 local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string")
 local wasActive = true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 3000.0 // seconds with no activity before calling server.sleepfor
+const sleepforTimeout = 180.0 // seconds with no activity before calling server.sleepfor
 const sleepforDuration = 1620 // seconds to stay in deep sleep (wakeup is a reboot)
-local accelSamplePeriod = 4.0 // seconds between reads of the XYZ accel data
-local lastAccelData = array(3) // last value to compare change for activity detection
-local minAccelData = array(3)
-local maxAccelData = array(3)
+local accelSamplePeriod = 1.0/4 // seconds between reads of the XYZ accel data
+
+class AccelXYZ {
+    constructor(nx,ny,nz) {
+        x = nx
+        y = ny
+        z = nz
+    }
+    x = null
+    y = null
+    z = null
+    function mag() {
+        return x*x + y*y + z*z
+    }
+    function compareMag(xyz) {
+        return math.abs(this.mag() - xyz.mag())
+    }
+    function setByIndex(i, val) {
+        switch (i) {
+            case 0: x = val; break
+            case 1: y = val; break
+            case 2: z = val; break
+        }
+    }
+    function asArray() {
+        return [x, y, z]
+    }
+}
 
 ///////////////////////////////////////////////
 // constants for MMA8452 i2c registers
@@ -49,8 +75,7 @@ function roll(dieValue) {
     log(message,0)
 }
 
-function eventButton()
-{
+function eventButton() {
     if (hardware.pin1.read() == 1) {  // FIXME: Experimentally there has been no need for debounce.  The neeed may show up with more testing.
         log("    buttonState === 1", 200)
         roll(math.rand() % 6 + 1) // 1 - 6 for a six sided die
@@ -60,18 +85,16 @@ function eventButton()
     }
 }
 
-function eventInt1()
-{
+function eventInt1() {
     log("Interrupt 1 changed.", 10)
 }
 
-function eventInt2()
-{
+function eventInt2() {
     log("Interrupt 2 changed.", 10)
 }
 
-function checkActivity()
-{
+// checkActivity re-schedules itself every sleepforTimeout
+function checkActivity() {
     log("checkActivity() every " + sleepforTimeout + " secs.", 20)
     log("V = " + hardware.voltage(), 150)
     if (wasActive) {
@@ -84,15 +107,13 @@ function checkActivity()
 }
 
 // Read a single byte from addressToRead and return it as a byte.  (The '[0]' causes a byte to return)
-function readReg(addressToRead)
-{
+function readReg(addressToRead) {
     return readSequentialRegs(addressToRead, 1)[0]
 }
 
 // Writes a single byte (dataToWrite) into addressToWrite.  Returns error code from i2c.write
 // Continue retry until success.  Caller does not need to check error code
-function writeReg(addressToWrite, dataToWrite)
-{
+function writeReg(addressToWrite, dataToWrite) {
     local err = null
     while (err == null) {
         err = i2c.write(MMA8452_ADDR << 1, format("%c%c", addressToWrite, dataToWrite))
@@ -106,8 +127,7 @@ function writeReg(addressToWrite, dataToWrite)
 
 // Read numBytes sequentially, starting at addressToRead
 // Continue retry until success.  Caller does not need to check error code
-function readSequentialRegs(addressToRead, numBytes)
-{
+function readSequentialRegs(addressToRead, numBytes) {
     local data = null
     while (data == null) {
         data = i2c.read(MMA8452_ADDR << 1, format("%c", addressToRead), numBytes)
@@ -119,10 +139,9 @@ function readSequentialRegs(addressToRead, numBytes)
     return data
 }
 
-function readAccelData()
-{
+function readAccelData() {
     local rawData = array(6) // x/y/z accel register data stored here, 6 bytes
-    local dest = array(3) // holds 3 16 bit ints
+    local dest = AccelXYZ(null,null,null)
     
     rawData = readSequentialRegs(OUT_X_MSB, 6)  // Read the six raw data registers into data array
     if (rawData == null)
@@ -131,34 +150,31 @@ function readAccelData()
     // Loop to calculate 16-bit ADC and g value for each axis
     local i
     local val
-    foreach(i, val in dest) {
+    foreach(i,val in dest.asArray()) {
         val = (rawData[i*2] << 8) | rawData[(i*2)+1]  //Combine the two 8 bit registers into one 16-bit number
         // Actually the MMA8452 only provides 12bits.  The lowest 4 bits will always be 0.
         // If the number is negative, we have to make it so manually (no 12-bit data type)
         if (val >= 32768)
             val = val - 65536
-        dest[i] = val
+        dest.setByIndex(i, val)
     }
     return dest
 }
 
 // Sets the MMA8452 to standby mode. It must be in standby to change most register settings
-function MMA8452Standby()
-{
+function MMA8452Standby() {
     return writeReg(CTRL_REG1, readReg(CTRL_REG1) & ~(0x01)) //Clear the active bit to go into standby
 }
 
 // Sets the MMA8452 to active mode. Needs to be in this mode to output data
-function MMA8452Active()
-{
+function MMA8452Active() {
     return writeReg(CTRL_REG1, readReg(CTRL_REG1) | 0x01) //Set the active bit to begin detection
 }
 
 // Initialize the MMA8452 registers 
 // See the many application notes for more info on setting all of these registers:
 // http://www.freescale.com/webapp/sps/site/prod_summary.jsp?code=MMA8452Q
-function initMMA8452()
-{
+function initMMA8452() {
     do {
         local byte = readReg(WHO_AM_I)  // Read WHO_AM_I register
         if (byte == I_AM_MMA8452) {
@@ -166,6 +182,7 @@ function initMMA8452()
             break
         } else {
             error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%0x", byte), 10)
+            imp.sleep(i2cRetryPeriod)
         }
     } while (true)
     
@@ -180,16 +197,14 @@ function initMMA8452()
     MMA8452Active()  // Set to active to start reading
 }
 
-function pollMMA8452()
-{
+function logXYZ(xyz, level) {
     local spaces = "                                                                          "
     local bars   = "##########################################################################"
     local string = ""
-    local xyz = readAccelData()
-    local len
     local val
-//    log(xyz[0] + " " + xyz[1] + " " + xyz[2], 50)
-    foreach(val in xyz) {
+    local len
+
+    foreach(val in xyz.asArray()) {
         len = val / 1024
         if (len <= 0) {
             string += spaces.slice(0,16+len)
@@ -205,7 +220,17 @@ function pollMMA8452()
             string += spaces.slice(0,16)
         }
     }
-    log(string, 10)
+    log(format("mag=%11.0d", xyz.mag()) + string, level)
+}
+
+function pollMMA8452() {
+    local xyz = readAccelData()
+    local mag = xyz.mag()
+    
+    if (mag > 290000000 || mag < 240000000) {
+        logXYZ(xyz, 10)
+        wasActive = true
+    }
     imp.wakeup(accelSamplePeriod, pollMMA8452)
 }
 
@@ -216,7 +241,7 @@ hardware.pin1.configure(DIGITAL_IN_WAKEUP, eventButton)
 hardware.pin5.configure(DIGITAL_IN_PULLUP, eventInt1) // interrupt 1 from MMA8452
 hardware.pin7.configure(DIGITAL_IN_PULLUP, eventInt2) // interrupt 2 from MMA8452
 // set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
-hardware.i2c89.configure(CLOCK_SPEED_400_KHZ)
+i2c.configure(CLOCK_SPEED_400_KHZ)
 
 // Register with the server
 imp.configure("MMA8452 Dice", [], [webscriptioOutputPort], {dieID = "I10100000001", logVerbosity = 100, errorVerbosity = 1000})
@@ -228,7 +253,7 @@ log(">>> BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.ge
 // roll every time we boot just for some idle activity
 roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
 
-imp.wakeup(sleepforTimeout, checkActivity)
+checkActivity() // kickstart checkActivity, this re-schedules itself every sleepforTimeout seconds
 
 initMMA8452()
 pollMMA8452()
