@@ -20,22 +20,27 @@ static int baud = 57600;  //must match baud rate of sketch on JeeLink USB stick
 int[] inXYZ = new int[3];  // raw values from string to int
 
 int diceId = 0;
-static int diceIdMin = 6;
-static int diceIdMax = 10;
+static int diceIdMin = 1;
+static int diceIdMax = 2;
 static int numDice = diceIdMax + 1 - diceIdMin;
 String[] pubNubDiceId = new String[numDice];
-//  pubNubDiceId[0] = "J10100000001";  // nodeId 6
-//  pubNubDiceId[1] = "S10100000003";  // nodeId 7
-//  pubNubDiceId[2] = "S10100000004";  // nodeId 8
-//  pubNubDiceId[3] = "S10100000005";  // nodeId 9
-//  pubNubDiceId[4] = "S10100000006";  // nodeId 10
+//pubNubDieId[0] = "J10100000001"  // Jeelink nodeId 6
+//pubNubDieId[1] = "S10100000003"  // Jeelink nodeId 7
+//pubNubDieId[2] = "S10100000004"  // Jeelink nodeId 8 (dead, one wire needs re-solder)
+//pubNubDieId[3] = "S10100000005"  // Jeelink nodeId 9
+//pubNubDieId[4] = "I10100000001"  // Electric Imp version
+//pubNubDieId[5] = "T10100000001"  // Duppy's Twine
+//pubNubDieId[6] = "N10100000001"  // Duppy's NinjaBlock
 String[] diceRoll = new String[numDice];
 String[] lastDiceRoll = new String[numDice];
 
 import processing.net.*;
 Client client;
-int numGETsBeforeStop = 4;
+int numGETsBeforeStop = 37;
 int pubCount = numGETsBeforeStop;
+int testPeriod = 1500; // milliseconds between send test messages (sent during idle)
+int idleTimeout = 5000; // milliseconds of no JeeLink msg recvd before going to idle
+int throttleDelay = 1; // milliseconds after client.stop() FIXME:I'm still seeing java.net.SocketException: even with this delay
 // keys for myinternetdice@gmail.com
 //static String pubNubPubKey = "pub-1b4e9e64-d3c7-452d-a730-6e3bf9368653"; SECRET
 //static String pubNubSubKey = "sub-dd119400-d20d-11e1-a576-a12a9356843b";
@@ -65,8 +70,6 @@ float now;
 float[] lastSerialMsg = new float[numDice];
 float[] lastRandomTest = new float[numDice];
 float[] lastPub = new float[numDice];
-float testPeriod = 3000; // milliseconds between send test messages (sent during idle)
-float idleTimeout = 15000; // milliseconds of no JeeLink msg recvd before going to idle
 
 int w1, sep;
 int d, w2;
@@ -110,12 +113,12 @@ void setup () {
     inPVMag[i] = (150 + 330) / 2; // fake idle Mag
   }
   
-  pubNubDiceId[0] = "J10100000001";  // nodeId 6
-  pubNubDiceId[1] = "S10100000003";  // nodeId 7
+//  pubNubDiceId[0] = "J10100000001";  // nodeId 6
+  pubNubDiceId[0] = "S10100000003";  // nodeId 7
 //  pubNubDiceId[2] = "S10100000004";  // nodeId 8 (broken wire)
-  pubNubDiceId[2] = "N10100000001";  // nodeId 8 (temporary send random values)
-  pubNubDiceId[3] = "S10100000005";  // nodeId 9
-  pubNubDiceId[4] = "S10100000006";  // nodeId 10
+  pubNubDiceId[1] = "S10100000004";  // nodeId 8 (temporary send random values)
+//  pubNubDiceId[3] = "S10100000005";  // nodeId 9
+//  pubNubDiceId[4] = "S10100000006";  // nodeId 10
 
   client = new Client(this, server, 80);
   if (client == null) {
@@ -125,6 +128,9 @@ void setup () {
 
 //  frameRate(60);
 }
+
+long lastTime = 0;
+
  
 void draw () {
   
@@ -193,10 +199,10 @@ void draw () {
       oy = sep + w1 + sep;
     }
 
-    if (lastSerialMsg[i] < (now - idleTimeout)) { // If no serial msg received for 15 seconds
-      if (lastRandomTest[i] < (now - testPeriod) ) { // if no randrom roll in 6 seconds
+    if (lastSerialMsg[i] < (now - idleTimeout)) { // If no serial msg received for idleTimeout seconds
+      if (lastRandomTest[i] < (now - testPeriod) ) { // if no randrom roll in testPeriod seconds
         lastRandomTest[i] = now;
-        diceRoll[i] = "test" + int(random(1,8)); // include 7 as a blank face
+        diceRoll[i] = "test" + int(random(1,7)); // random 1-6 inclusive
         inPVMag[i] = (150 + 330) / 2; // fake idle Mag
 //        print(" " + i + "=#" + diceRoll[i] +"#");
       }
@@ -216,9 +222,12 @@ void draw () {
           print("WAITING...");
           while( (client.available() == 0) ) ;  // wait for response or new die roll
 //          print("\r\n" + client.readString());
-          println("CLOSING.");
+          print("CLOSING....");
+          lastTime = millis();
+          while (millis() - lastTime < throttleDelay) ;
           if (client != null) {
             client.stop();
+            println("....CLOSED");
           } else {
             println("CLIENT CLOSED AFTER RESPONSE READ:");
           }
@@ -226,10 +235,13 @@ void draw () {
           println("CLIENT CLOSED UNEXPECTEDLY");
           exit();
         }
+        print("OPENING... ");
         client = new Client(this, server, 80);
         if (client == null) {
           println("create client for " + server + " FAILED.");
           exit();
+        } else {
+          println("new Client() SUCCESS!");
         }
         pubCount = numGETsBeforeStop;
       }   
@@ -251,7 +263,15 @@ http://pubsub.pubnub.com/publish/pub-key/sub-key/0/S10100000004/0/{"roll":"test7
       String e = "User-Agent: Java\r\n";
       String f = "Accept: */*\r\n\r\n";
       String shortGET = "\r\nGET ..." + a.substring(a.length() - 65, a.length() - 2);
-      print("G"); print(a.substring(a.length() - 41, a.length() - 40) ); // print(shortGET);
+      print("G"); print(pubNubDiceId[i].substring(0,2) + pubNubDiceId[i].substring(10,12));
+      print(a.substring(a.length() - 41, a.length() - 40) ); // print(shortGET);
+//      print(a);
+      lastTime = millis();
+      while (millis() - lastTime < throttleDelay) ;
+      if (client == null) {
+        println("CLIENT CLOSED UNEXPECTEDLY");
+        exit();
+      }
       client.write(a); client.write(b); client.write(c); client.write(e); client.write(f);
       lastPub[i] = now;
       pubCount = pubCount - 1;
@@ -316,9 +336,10 @@ print(nums[0]);
 }
 
 void disconnectEvent(Client someClient) {
-  print("pubCount=" + pubCount + ", Server Says:  ");
-  dataIn = client.read();
-  println(dataIn);
-  background(dataIn);
+  print("X");
+//  print("pubCount=" + pubCount + ", Server Says:  ");
+//  dataIn = someClient.read();
+//  println(dataIn);
+//  background(dataIn);  // I forgot why I added this? Doesn't make sense.
 }
 

@@ -2,12 +2,14 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452 Dice v00.01.2013-03-05c"
+const versionString = "MMA8452 Dice v00.01.2013-03-07a"
 local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string")
 local wasActive = true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 180.0 // seconds with no activity before calling server.sleepfor
-const sleepforDuration = 1620 // seconds to stay in deep sleep (wakeup is a reboot)
-local accelSamplePeriod = 1.0/4 // seconds between reads of the XYZ accel data
+const sleepforTimeout = 151.0 // seconds with no activity before calling server.sleepfor
+const sleepforDuration = 30 // seconds to stay in deep sleep (wakeup is a reboot)
+local accelSamplePeriod = 1.0/8 // seconds between reads of the XYZ accel data
+local vizSpaces = "                                                                                                                                                                  "
+local vizBars   = "##################################################################################################################################################################"
 
 class AccelXYZ {
     constructor(nx,ny,nz) {
@@ -20,9 +22,6 @@ class AccelXYZ {
     z = null
     function mag() {
         return x*x + y*y + z*z
-    }
-    function compareMag(xyz) {
-        return math.abs(this.mag() - xyz.mag())
     }
     function setByIndex(i, val) {
         switch (i) {
@@ -38,24 +37,30 @@ class AccelXYZ {
 
 ///////////////////////////////////////////////
 // constants for MMA8452 i2c registers
+// the slave address for this device is set in hardware. Creating a variable to save it here is helpful.
+// The SparkFun breakout board defaults to 0x1D, set to 0x1C if SA0 jumper on the bottom of the board is set
 local MMA8452_ADDR = 0x1D // A '<< 1' is needed.  I add the '<< 1' in the helper functions.  FIXME:  Why is '<< 1' needed?
 //local MM8452_ADDR = 0x1C // Use this address if SA0 jumper is set. 
 const OUT_X_MSB     = 0x01
+const INT_SOURCE    = 0x0C
 const XYZ_DATA_CFG  = 0x0E
-const WHO_AM_I      = 0x0D
-const I_AM_MMA8452  = 0x2A
+const WHO_AM_I      = 0x0D; const I_AM_MMA8452  = 0x2A // read addr WHO_AM_I, expect I_AM_MMA8452
+const PL_STATUS     = 0x10
 const CTRL_REG1     = 0x2A
+const CTRL_REG2     = 0x2B
+const CTRL_REG3     = 0x2C
+const CTRL_REG4     = 0x2D
+const     INT_EN_LNDPRT  = 0x10 // bit4
+const     INT_EN_DRDY    = 0x01 // bit0
 // helper variables for MMA8452. These are not const because they may have reason to change dynamically.
 local GSCALE        = 2 
 local i2c = hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
-// the slave address for this device is set in hardware. Creating a variable to save it here is helpful.
-// The SparkFun breakout board defaults to 0x1D, set to 0x1C if SA0 jumper on the bottom of the board is set
 local i2cRetryPeriod = 1.0
 
 ///////////////////////////////////////////////
 //define functions
 function log(string, level) {
-    local indent = "                                                  ".slice(0, level/10 + 1)
+    local indent = vizSpaces.slice(0, level/10 + 1)
     if (level <= imp.configparams.logVerbosity)
         server.log(indent + string)
     if (level == 0)
@@ -63,7 +68,7 @@ function log(string, level) {
 }
 
 function error(string, level) {
-    local indent = "                                                  ".slice(0, level/10 + 1)
+    local indent = vizSpaces.slice(0, level/10 + 1)
     if (level <= imp.configparams.errorVerbosity)
         server.error(indent + string)
 }
@@ -118,7 +123,7 @@ function writeReg(addressToWrite, dataToWrite) {
     while (err == null) {
         err = i2c.write(MMA8452_ADDR << 1, format("%c%c", addressToWrite, dataToWrite))
         if (err == null) {
-            error("i2c.write of value " + format("0x%0x", dataToWrite) + " to " + format("0x%0x", addressToWrite) + " failed.", 10)
+            error("i2c.write of value " + format("0x%02x", dataToWrite) + " to " + format("0x%02x", addressToWrite) + " failed.", 10)
             imp.sleep(i2cRetryPeriod)
         }
     }
@@ -132,7 +137,7 @@ function readSequentialRegs(addressToRead, numBytes) {
     while (data == null) {
         data = i2c.read(MMA8452_ADDR << 1, format("%c", addressToRead), numBytes)
         if (data == null) {
-            error("i2c.read from " + format("0x%0x", addressToRead) + " of " + numBytes + " byte" + ((numBytes > 1) ? "s" : "") + " failed.", 10)
+            error("i2c.read from " + format("0x%02x", addressToRead) + " of " + numBytes + " byte" + ((numBytes > 1) ? "s" : "") + " failed.", 10)
             imp.sleep(i2cRetryPeriod)
         }
     }
@@ -181,7 +186,7 @@ function initMMA8452() {
             log("MMA8452Q is online...", 10)
             break
         } else {
-            error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%0x", byte), 10)
+            error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", byte), 10)
             imp.sleep(i2cRetryPeriod)
         }
     } while (true)
@@ -193,13 +198,15 @@ function initMMA8452() {
     writeReg(XYZ_DATA_CFG, GSCALE >> 2)
     
     //The default data rate is 800Hz and we don't modify it in this example code
-    
+
+    //Enable interrupts
+    writeReg(CTRL_REG4, readReg(CTRL_REG4) | INT_EN_LNDPRT)
+//    writeReg(CTRL_REG4, readReg(CTRL_REG4) | INT_EN_DRDY)
+
     MMA8452Active()  // Set to active to start reading
 }
 
-function logXYZ(xyz, level) {
-    local spaces = "                                                                          "
-    local bars   = "##########################################################################"
+function vizXYZ(xyz, level) {
     local string = ""
     local val
     local len
@@ -207,20 +214,22 @@ function logXYZ(xyz, level) {
     foreach(val in xyz.asArray()) {
         len = val / 1024
         if (len <= 0) {
-            string += spaces.slice(0,16+len)
-            string += bars.slice(0,-len)
+            string += vizSpaces.slice(0,16+len)
+            string += vizBars.slice(0,-len)
         } else {
-            string += spaces.slice(0,16)
+            string += vizSpaces.slice(0,16)
         }
         string += format("%6.0d",val)
         if (len > 0) {
-            string += bars.slice(0,len)
-            string += spaces.slice(0,16-len)
+            string += vizBars.slice(0,len)
+            string += vizSpaces.slice(0,16-len)
         } else{
-            string += spaces.slice(0,16)
+            string += vizSpaces.slice(0,16)
         }
     }
     log(format("mag=%11.0d", xyz.mag()) + string, level)
+//    log(format("0x%02x",readReg(INT_SOURCE)), 100)
+//    log(format("0x%02x",readReg(CTRL_REG4)), 100)
 }
 
 function pollMMA8452() {
@@ -228,7 +237,7 @@ function pollMMA8452() {
     local mag = xyz.mag()
     
     if (mag > 290000000 || mag < 240000000) {
-        logXYZ(xyz, 10)
+        vizXYZ(xyz, 10)
         wasActive = true
     }
     imp.wakeup(accelSamplePeriod, pollMMA8452)
