@@ -262,7 +262,7 @@ http://pubsub.pubnub.com/publish/pub-key/sub-key/0/S10100000004/0/{"roll":"test7
       String c = "V: 3.1\r\n";
       String e = "User-Agent: Java\r\n";
       String f = "Accept: */*\r\n\r\n";
-      String shortGET = "\r\nGET ..." + a.substring(a.length() - 65, a.length() - 2);
+//      String shortGET = "\r\nGET ..." + a.substring(a.length() - 65, a.length() - 2);
       print("G"); print(pubNubDiceId[i].substring(0,2) + pubNubDiceId[i].substring(10,12));
       print(a.substring(a.length() - 41, a.length() - 40) ); // print(shortGET);
 //      print(a);

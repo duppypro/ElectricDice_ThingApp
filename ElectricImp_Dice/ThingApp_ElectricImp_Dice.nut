@@ -1,28 +1,20 @@
-/* Electric Dice using MMA8452 accelerometer */
+/* Electric Dice using MMA8452Q accelerometer */
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452 Dice v00.01.2013-03-07a"
+const versionString = "MMA8452Q Dice v00.01.2013-03-13a"
 local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string")
 local wasActive = true // stay alive on boot as if button was pressed or die moved/rolled
 const sleepforTimeout = 151.0 // seconds with no activity before calling server.sleepfor
-const sleepforDuration = 30 // seconds to stay in deep sleep (wakeup is a reboot)
+const sleepforDuration = 900 // seconds to stay in deep sleep (wakeup is a reboot)
 local accelSamplePeriod = 1.0/8 // seconds between reads of the XYZ accel data
-local vizSpaces = "                                                                                                                                                                  "
+local vizSpaces = ".................................................................................................................................................................."
 local vizBars   = "##################################################################################################################################################################"
 
-class AccelXYZ {
-    constructor(nx,ny,nz) {
-        x = nx
-        y = ny
-        z = nz
-    }
-    x = null
-    y = null
-    z = null
-    function mag() {
-        return x*x + y*y + z*z
-    }
+class AccelXYZ { // A 3 item vector with magnitude squared method
+    constructor(nx,ny,nz) { x=nx; y=ny; z=nz }
+    x = null; y = null; z = null
+    function magSquared() { return x*x + y*y + z*z } // assuming that square root would take too long
     function setByIndex(i, val) {
         switch (i) {
             case 0: x = val; break
@@ -30,32 +22,101 @@ class AccelXYZ {
             case 2: z = val; break
         }
     }
-    function asArray() {
-        return [x, y, z]
-    }
+    function asArray() { return [x, y, z] }
 }
 
+function readBitField(val, bitPosition, numBits){ // works for 8bit and registers
+    return (val >> bitPosition) & (0x00FF >> (8 - numBits))
+}
+
+function readBit(val, bitPosition) { return readBitField(val, bitPosition, 1) }
+
+function writeBitField(val, bitPosition, numBits, newVal) { // works for 8bit registers
+// newVal is not bounds checked
+    return (val & (((0x00FF >> (8 - numBits)) << bitPosition) ^ 0x00FF)) | (newVal << bitPosition)
+}
+
+function writeBit(val, bitPosition, newVal) { return writeBitField(val, bitPosition, 1, newVal) }
+
 ///////////////////////////////////////////////
-// constants for MMA8452 i2c registers
+// constants for MMA8452Q i2c registers
 // the slave address for this device is set in hardware. Creating a variable to save it here is helpful.
 // The SparkFun breakout board defaults to 0x1D, set to 0x1C if SA0 jumper on the bottom of the board is set
-local MMA8452_ADDR = 0x1D // A '<< 1' is needed.  I add the '<< 1' in the helper functions.  FIXME:  Why is '<< 1' needed?
-//local MM8452_ADDR = 0x1C // Use this address if SA0 jumper is set. 
-const OUT_X_MSB     = 0x01
-const INT_SOURCE    = 0x0C
-const XYZ_DATA_CFG  = 0x0E
-const WHO_AM_I      = 0x0D; const I_AM_MMA8452  = 0x2A // read addr WHO_AM_I, expect I_AM_MMA8452
-const PL_STATUS     = 0x10
-const CTRL_REG1     = 0x2A
-const CTRL_REG2     = 0x2B
-const CTRL_REG3     = 0x2C
-const CTRL_REG4     = 0x2D
-const     INT_EN_LNDPRT  = 0x10 // bit4
-const     INT_EN_DRDY    = 0x01 // bit0
-// helper variables for MMA8452. These are not const because they may have reason to change dynamically.
-local GSCALE        = 2 
+const MMA8452Q_ADDR = 0x1D // A '<< 1' is needed.  I add the '<< 1' in the helper functions.
+//const MM8452Q_ADDR = 0x1C // Use this address if SA0 jumper is set. 
+const STATUS           = 0x00
+    const ZYXOW_BIT        = 0x7 // name_BIT == BIT position of name
+    const ZYXDR_BIT        = 0x3
+const OUT_X_MSB        = 0x01
+const SYSMOD           = 0x0B
+    const SYSMOD_STANDBY   = 0x00
+    const SYSMOD_WAKE      = 0x01
+    const SYSMOD_SLEEP     = 0x02
+const INT_SOURCE       = 0x0C
+    const SRC_ASLP_BIT     = 0x7
+    const SRC_FF_MT_BIT    = 0x2
+    const SRC_DRDY_BIT     = 0x0
+const WHO_AM_I         = 0x0D
+    const I_AM_MMA8452Q    = 0x2A // read addr WHO_AM_I, expect I_AM_MMA8452Q
+const XYZ_DATA_CFG     = 0x0E
+    const FS_2G            = 0x00
+    const FS_4G            = 0x01
+    const FS_8G            = 0x02
+    const HPF_OUT_BIT      = 0x5
+const HP_FILTER_CUTOFF = 0x0F
+const PL_STATUS        = 0x10
+const PL_CFG           = 0x11
+const PL_COUNT         = 0x12
+const PL_BF_ZCOMP      = 0x13
+const PL_THS           = 0x14 // NOTE: this is P_L_THS_REG in the manual but that is likely a typo.  I chose a name more consistent with other names
+const FF_MT_CFG        = 0x15
+    const ELE_BIT          = 0x7
+    const OAE_BIT          = 0x6
+    const XYZEFE_BIT       = 0x3 // numBits == 3 (one each for XYZ)
+const FF_MT_SRC        = 0x16
+    const EA_BIT           = 0x7
+const FF_MT_THS        = 0x17
+    const DBCNTM_BIT       = 0x7
+    const THS          = 0x0 // numBits == 7
+const FF_MT_COUNT      = 0x18
+const TRANSIENT_CFG    = 0x1D
+const TRANSIENT_SRC    = 0x1E
+const TRANSIENT_THS    = 0x1F
+const TRANSIENT_COUNT  = 0x20
+const PULSE_CFG        = 0x21
+const PULSE_SRC        = 0x22
+const PULSE_THSX       = 0x23
+const PULSE_THSY       = 0x24
+const PULSE_THSZ       = 0x25
+const PULSE_TMLT       = 0x26
+const PULSE_LTCY       = 0x27
+const PULSE_WIND       = 0x28
+const ASLP_COUNT       = 0x29
+const CTRL_REG1        = 0x2A
+    const ASLP_RATE_BIT    = 0x6 // numBits == 2
+    const DR_BIT           = 0x3 // numBits == 3
+    const LNOISE_BIT       = 0x2
+    const F_READ_BIT       = 0x1
+    const ACTIVE_BIT       = 0x0
+const CTRL_REG2        = 0x2B
+    const ST_BIT           = 0x7
+    const RST_BIT          = 0x6
+    const SMODS_BIT        = 0x3 // numBits == 2
+    const SLPE_BIT         = 0x2
+    const MODS_BIT         = 0x0 // numBits == 2
+    const MODS_NORMAL      = 0x00
+    const MODS_LOW_POWER   = 0x03
+const CTRL_REG3        = 0x2C
+    const WAKE_FF_MT_BIT   = 0x3
+    const IPOL_BIT         = 0x1
+const CTRL_REG4        = 0x2D
+    const INT_EN_LNDPRT_BIT= 0x4
+    const INT_EN_FF_MT_BIT = 0x2
+    const INT_EN_DRDY_BIT  = 0x0
+const CTRL_REG5        = 0x2E
+// helper variables for MMA8452Q. These are not const because they may have reason to change dynamically.
 local i2c = hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
-local i2cRetryPeriod = 1.0
+local i2cRetryPeriod = 1.0 // seconds to wait before retrying a failed i2c operation
 
 ///////////////////////////////////////////////
 //define functions
@@ -121,7 +182,7 @@ function readReg(addressToRead) {
 function writeReg(addressToWrite, dataToWrite) {
     local err = null
     while (err == null) {
-        err = i2c.write(MMA8452_ADDR << 1, format("%c%c", addressToWrite, dataToWrite))
+        err = i2c.write(MMA8452Q_ADDR << 1, format("%c%c", addressToWrite, dataToWrite))
         if (err == null) {
             error("i2c.write of value " + format("0x%02x", dataToWrite) + " to " + format("0x%02x", addressToWrite) + " failed.", 10)
             imp.sleep(i2cRetryPeriod)
@@ -135,7 +196,7 @@ function writeReg(addressToWrite, dataToWrite) {
 function readSequentialRegs(addressToRead, numBytes) {
     local data = null
     while (data == null) {
-        data = i2c.read(MMA8452_ADDR << 1, format("%c", addressToRead), numBytes)
+        data = i2c.read(MMA8452Q_ADDR << 1, format("%c", addressToRead), numBytes)
         if (data == null) {
             error("i2c.read from " + format("0x%02x", addressToRead) + " of " + numBytes + " byte" + ((numBytes > 1) ? "s" : "") + " failed.", 10)
             imp.sleep(i2cRetryPeriod)
@@ -145,44 +206,35 @@ function readSequentialRegs(addressToRead, numBytes) {
 }
 
 function readAccelData() {
-    local rawData = array(6) // x/y/z accel register data stored here, 6 bytes
-    local dest = AccelXYZ(null,null,null)
-    
-    rawData = readSequentialRegs(OUT_X_MSB, 6)  // Read the six raw data registers into data array
-    if (rawData == null)
-        return null
-
-    // Loop to calculate 16-bit ADC and g value for each axis
-    local i
-    local val
-    foreach(i,val in dest.asArray()) {
-        val = (rawData[i*2] << 8) | rawData[(i*2)+1]  //Combine the two 8 bit registers into one 16-bit number
-        // Actually the MMA8452 only provides 12bits.  The lowest 4 bits will always be 0.
-        // If the number is negative, we have to make it so manually (no 12-bit data type)
-        if (val >= 32768)
-            val = val - 65536
-        dest.setByIndex(i, val)
-    }
+    local rawData = array(3) // x/y/z accel register data stored here, 3 bytes
+    local dest = AccelXYZ(null, null, null)
+    rawData = readSequentialRegs(OUT_X_MSB, 3)  // Read the three raw data registers into data array
+    // above assumes we are in F_READ mode == 1 to read 8 bits per xyz
+    dest.x = (rawData[0] < 128 ? rawData[0] : rawData[0] - 256) / 64.0
+    dest.y = (rawData[1] < 128 ? rawData[1] : rawData[1] - 256) / 64.0
+    dest.z = (rawData[2] < 128 ? rawData[2] : rawData[2] - 256) / 64.0
     return dest
 }
 
-// Sets the MMA8452 to standby mode. It must be in standby to change most register settings
-function MMA8452Standby() {
-    return writeReg(CTRL_REG1, readReg(CTRL_REG1) & ~(0x01)) //Clear the active bit to go into standby
+// Reset the MMA8452Q
+function MMA8452QReset() {
+    return writeReg(CTRL_REG2, writeBit(readReg(CTRL_REG2), RST_BIT, 1))
 }
 
-// Sets the MMA8452 to active mode. Needs to be in this mode to output data
-function MMA8452Active() {
-    return writeReg(CTRL_REG1, readReg(CTRL_REG1) | 0x01) //Set the active bit to begin detection
+function MMA8452QSetActive(mode) {
+    // Sets the MMA8452Q active mode.
+    // 0 == STANDBY for changing registers
+    // 1 == ACTIVE for outputting data
+    return writeReg(CTRL_REG1, writeBit(readReg(CTRL_REG1), ACTIVE_BIT, mode))
 }
 
-// Initialize the MMA8452 registers 
+// Initialize the MMA8452Q registers 
 // See the many application notes for more info on setting all of these registers:
 // http://www.freescale.com/webapp/sps/site/prod_summary.jsp?code=MMA8452Q
-function initMMA8452() {
+function initMMA8452Q() {
     do {
         local byte = readReg(WHO_AM_I)  // Read WHO_AM_I register
-        if (byte == I_AM_MMA8452) {
+        if (byte == I_AM_MMA8452Q) {
             log("MMA8452Q is online...", 10)
             break
         } else {
@@ -191,19 +243,23 @@ function initMMA8452() {
         }
     } while (true)
     
-    MMA8452Standby()  // Must be in standby to change registers
+    MMA8452QReset() // Sometimes imp card resets and MMA8452Q keeps power
+    // in STANDBY already after RESET  MMA8452QSetActive(0)  // Must be in standby to change registers
     
     // Set up the full scale range to 2, 4, or 8g.
-    // use GSCALE >> 2 : Neat trick, see page 22. 00 = 2G, 01 = 4A, 10 = 8G
-    writeReg(XYZ_DATA_CFG, GSCALE >> 2)
+    // FIXME: assumes HPF_OUT_BIT in this same register always == 0
+    writeReg(XYZ_DATA_CFG, FS_2G)
     
     //The default data rate is 800Hz and we don't modify it in this example code
 
+    // Set Fast read mode to read 8bits per xyz instead of 12bits
+    writeReg(CTRL_REG1, writeBit(readReg(CTRL_REG1), F_READ_BIT, 1))
+    // change Int Polarity
+    writeReg(CTRL_REG3, writeBit(readReg(CTRL_REG3), IPOL_BIT, 1))
     //Enable interrupts
-    writeReg(CTRL_REG4, readReg(CTRL_REG4) | INT_EN_LNDPRT)
-//    writeReg(CTRL_REG4, readReg(CTRL_REG4) | INT_EN_DRDY)
+//    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_FF_MT_BIT, 1)
 
-    MMA8452Active()  // Set to active to start reading
+    MMA8452QSetActive(1)  // Set to active to start reading
 }
 
 function vizXYZ(xyz, level) {
@@ -227,33 +283,34 @@ function vizXYZ(xyz, level) {
             string += vizSpaces.slice(0,16)
         }
     }
-    log(format("mag=%11.0d", xyz.mag()) + string, level)
+    log(format("mag=%11.0d", xyz.magSquared()) + string, level)
 //    log(format("0x%02x",readReg(INT_SOURCE)), 100)
 //    log(format("0x%02x",readReg(CTRL_REG4)), 100)
 }
 
-function pollMMA8452() {
+function pollMMA8452Q() {
     local xyz = readAccelData()
-    local mag = xyz.mag()
+    local mag = xyz.magSquared()
     
-    if (mag > 290000000 || mag < 240000000) {
-        vizXYZ(xyz, 10)
+    if (mag > 290000000/256 || mag < 240000000/256) {
+        log(format("%9.3f %9.3f %9.3f", xyz.x, xyz.y, xyz.z),10)
+//        vizXYZ(xyz, 10)
         wasActive = true
     }
-    imp.wakeup(accelSamplePeriod, pollMMA8452)
+    imp.wakeup(accelSamplePeriod, pollMMA8452Q)
 }
 
 ////////////////////////////////////////////////////////
 // first code starts here
 // Configure pin1 for wakeup with internal pull down.  Connect hardware button from pin1 to VCC
 hardware.pin1.configure(DIGITAL_IN_WAKEUP, eventButton)
-hardware.pin5.configure(DIGITAL_IN_PULLUP, eventInt1) // interrupt 1 from MMA8452
-hardware.pin7.configure(DIGITAL_IN_PULLUP, eventInt2) // interrupt 2 from MMA8452
+hardware.pin5.configure(DIGITAL_IN, eventInt1) // interrupt 1 from MMA8452Q
+hardware.pin7.configure(DIGITAL_IN, eventInt2) // interrupt 2 from MMA8452Q
 // set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
 i2c.configure(CLOCK_SPEED_400_KHZ)
 
 // Register with the server
-imp.configure("MMA8452 Dice", [], [webscriptioOutputPort], {dieID = "I10100000001", logVerbosity = 100, errorVerbosity = 1000})
+imp.configure("MMA8452Q Dice", [], [webscriptioOutputPort], {dieID = "I10100000001", logVerbosity = 100, errorVerbosity = 1000})
 log("imp.configparams.dieID = " + imp.configparams.dieID, 10)
 
 // Send status to know we are alive
@@ -264,8 +321,8 @@ roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
 
 checkActivity() // kickstart checkActivity, this re-schedules itself every sleepforTimeout seconds
 
-initMMA8452()
-pollMMA8452()
+initMMA8452Q()
+pollMMA8452Q()
 
 // No more code to execute so we'll sleep until eventButton() occurs
 // End of code.
