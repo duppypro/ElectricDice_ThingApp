@@ -2,27 +2,19 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-03-13a"
-local webscriptioOutputPort = OutputPort("webscriptio_dieID_dieValue", "string")
-local wasActive = true // stay alive on boot as if button was pressed or die moved/rolled
+const versionString = "MMA8452Q Dice v00.01.2013-03-13b"
+webscriptioOutputPort <- OutputPort("webscriptio_dieID_dieValue", "string")
+dieID <- "I10100000001" // FIXME: assign this from a DNS
+logVerbosity <- 100 // higer numbers show more log messages
+errorVerbosity <- 1000 // higher number shows more error messages
+wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
 const sleepforTimeout = 151.0 // seconds with no activity before calling server.sleepfor
 const sleepforDuration = 900 // seconds to stay in deep sleep (wakeup is a reboot)
-local accelSamplePeriod = 1.0/8 // seconds between reads of the XYZ accel data
-local vizSpaces = ".................................................................................................................................................................."
-local vizBars   = "##################################################################################################################################################################"
+const accelSamplePeriod = 0.25 // seconds between reads of the XYZ accel data
 
 class AccelXYZ { // A 3 item vector with magnitude squared method
-    constructor(nx,ny,nz) { x=nx; y=ny; z=nz }
     x = null; y = null; z = null
     function magSquared() { return x*x + y*y + z*z } // assuming that square root would take too long
-    function setByIndex(i, val) {
-        switch (i) {
-            case 0: x = val; break
-            case 1: y = val; break
-            case 2: z = val; break
-        }
-    }
-    function asArray() { return [x, y, z] }
 }
 
 function readBitField(val, bitPosition, numBits){ // works for 8bit and registers
@@ -64,37 +56,23 @@ const XYZ_DATA_CFG     = 0x0E
     const FS_8G            = 0x02
     const HPF_OUT_BIT      = 0x5
 const HP_FILTER_CUTOFF = 0x0F
-const PL_STATUS        = 0x10
-const PL_CFG           = 0x11
-const PL_COUNT         = 0x12
-const PL_BF_ZCOMP      = 0x13
-const PL_THS           = 0x14 // NOTE: this is P_L_THS_REG in the manual but that is likely a typo.  I chose a name more consistent with other names
 const FF_MT_CFG        = 0x15
     const ELE_BIT          = 0x7
     const OAE_BIT          = 0x6
     const XYZEFE_BIT       = 0x3 // numBits == 3 (one each for XYZ)
+        const XYZEFE_ALL       = 0x07 // enable all 3 bits
 const FF_MT_SRC        = 0x16
     const EA_BIT           = 0x7
 const FF_MT_THS        = 0x17
     const DBCNTM_BIT       = 0x7
-    const THS          = 0x0 // numBits == 7
+    const THS_BIT          = 0x0 // numBits == 7
 const FF_MT_COUNT      = 0x18
-const TRANSIENT_CFG    = 0x1D
-const TRANSIENT_SRC    = 0x1E
-const TRANSIENT_THS    = 0x1F
-const TRANSIENT_COUNT  = 0x20
-const PULSE_CFG        = 0x21
-const PULSE_SRC        = 0x22
-const PULSE_THSX       = 0x23
-const PULSE_THSY       = 0x24
-const PULSE_THSZ       = 0x25
-const PULSE_TMLT       = 0x26
-const PULSE_LTCY       = 0x27
-const PULSE_WIND       = 0x28
 const ASLP_COUNT       = 0x29
 const CTRL_REG1        = 0x2A
     const ASLP_RATE_BIT    = 0x6 // numBits == 2
+        const ASLP_RATE_12p5HZ = 0x01
     const DR_BIT           = 0x3 // numBits == 3
+        const DR_12p5HZ        = 0x05
     const LNOISE_BIT       = 0x2
     const F_READ_BIT       = 0x1
     const ACTIVE_BIT       = 0x0
@@ -104,8 +82,8 @@ const CTRL_REG2        = 0x2B
     const SMODS_BIT        = 0x3 // numBits == 2
     const SLPE_BIT         = 0x2
     const MODS_BIT         = 0x0 // numBits == 2
-    const MODS_NORMAL      = 0x00
-    const MODS_LOW_POWER   = 0x03
+        const MODS_NORMAL      = 0x00
+        const MODS_LOW_POWER   = 0x03
 const CTRL_REG3        = 0x2C
     const WAKE_FF_MT_BIT   = 0x3
     const IPOL_BIT         = 0x1
@@ -114,6 +92,7 @@ const CTRL_REG4        = 0x2D
     const INT_EN_FF_MT_BIT = 0x2
     const INT_EN_DRDY_BIT  = 0x0
 const CTRL_REG5        = 0x2E
+
 // helper variables for MMA8452Q. These are not const because they may have reason to change dynamically.
 local i2c = hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
 local i2cRetryPeriod = 1.0 // seconds to wait before retrying a failed i2c operation
@@ -121,21 +100,21 @@ local i2cRetryPeriod = 1.0 // seconds to wait before retrying a failed i2c opera
 ///////////////////////////////////////////////
 //define functions
 function log(string, level) {
-    local indent = vizSpaces.slice(0, level/10 + 1)
-    if (level <= imp.configparams.logVerbosity)
+    local indent = "                                                  ".slice(0, level/10 + 1)
+    if (level <= logVerbosity)
         server.log(indent + string)
     if (level == 0)
         server.show(string)
 }
 
 function error(string, level) {
-    local indent = vizSpaces.slice(0, level/10 + 1)
-    if (level <= imp.configparams.errorVerbosity)
+    local indent = "                                                  ".slice(0, level/10 + 1)
+    if (level <= errorVerbosity)
         server.error(indent + string)
 }
 
 function roll(dieValue) {
-    local message = imp.configparams.dieID + "," + dieValue
+    local message = dieID + "," + dieValue
     // Planner will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
     webscriptioOutputPort.set(message)
     log(message,0)
@@ -156,7 +135,8 @@ function eventInt1() {
 }
 
 function eventInt2() {
-    log("Interrupt 2 changed.", 10)
+    pollMMA8452Q()
+    //readReg(FF_MT_SRC) // read in order to clear the interrupt
 }
 
 // checkActivity re-schedules itself every sleepforTimeout
@@ -207,10 +187,10 @@ function readSequentialRegs(addressToRead, numBytes) {
 
 function readAccelData() {
     local rawData = array(3) // x/y/z accel register data stored here, 3 bytes
-    local dest = AccelXYZ(null, null, null)
+    local dest = AccelXYZ()
     rawData = readSequentialRegs(OUT_X_MSB, 3)  // Read the three raw data registers into data array
     // above assumes we are in F_READ mode == 1 to read 8 bits per xyz
-    dest.x = (rawData[0] < 128 ? rawData[0] : rawData[0] - 256) / 64.0
+    dest.x = (rawData[0] < 128 ? rawData[0] : rawData[0] - 256) / 64.0 // convert to signed float
     dest.y = (rawData[1] < 128 ? rawData[1] : rawData[1] - 256) / 64.0
     dest.z = (rawData[2] < 128 ? rawData[2] : rawData[2] - 256) / 64.0
     return dest
@@ -241,63 +221,69 @@ function initMMA8452Q() {
             error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", byte), 10)
             imp.sleep(i2cRetryPeriod)
         }
-    } while (true)
-    
+    } while (true)    
     MMA8452QReset() // Sometimes imp card resets and MMA8452Q keeps power
     // in STANDBY already after RESET  MMA8452QSetActive(0)  // Must be in standby to change registers
-    
+    local reg
     // Set up the full scale range to 2, 4, or 8g.
     // FIXME: assumes HPF_OUT_BIT in this same register always == 0
     writeReg(XYZ_DATA_CFG, FS_2G)
     
-    //The default data rate is 800Hz and we don't modify it in this example code
-
+    // setup CTRL_REG1
+    reg = readReg(CTRL_REG1)
+    reg = writeBitField(reg, ASLP_RATE_BIT, 2, ASLP_RATE_12p5HZ)
+    reg = writeBitField(reg, DR_BIT, 3, DR_12p5HZ)
+    // leave LNOISE_BIT as default off to save power
     // Set Fast read mode to read 8bits per xyz instead of 12bits
-    writeReg(CTRL_REG1, writeBit(readReg(CTRL_REG1), F_READ_BIT, 1))
+    reg = writeBit(reg, F_READ_BIT, 1)
+    // set all CTRL_REG1 bit fields in one i2c write
+    writeReg(CTRL_REG1, reg)
+    
+    // setup CTRL_REG2
+    reg = readReg(CTRL_REG2)
+    // set Oversample mode in sleep
+    reg = writeBitField(reg, SMODS_BIT, 2, MODS_LOW_POWER)
+    // enable Auto-SLEEP
+    reg = writeBit(reg, SLPE_BIT, 1)
+    // set Oversample mode in wake
+    reg = writeBitField(reg, MODS_BIT, 2, MODS_LOW_POWER)
+    // set all CTRL_REG2 bit fields in one i2c write
+    writeReg(CTRL_REG2, reg)
+    
+    // setup CTRL_REG3
+    reg = readReg(CTRL_REG3)
+    // allow Motion to wake from SLEEP
+    reg = writeBit(reg, WAKE_FF_MT_BIT, 1)
     // change Int Polarity
-    writeReg(CTRL_REG3, writeBit(readReg(CTRL_REG3), IPOL_BIT, 1))
+    reg = writeBit(reg, IPOL_BIT, 1)
+    // set all CTRL_REG3 bit fields in one i2c write
+    writeReg(CTRL_REG3, reg)
+
     //Enable interrupts
-//    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_FF_MT_BIT, 1)
+    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_FF_MT_BIT, 1))
 
+    // setup FF_MT_CFG
+    reg = readReg(FF_MT_CFG)
+    // leave ELE_BIT as default disabled
+    // enable Motion detection
+    reg = writeBit(reg, OAE_BIT, 1)
+    // enable on all axis x, y, and z
+    reg = writeBitField(reg, XYZEFE_BIT, 3, XYZEFE_ALL)
+    // set all FF_MT_CFG bit fields in one i2c write
+    writeReg(FF_MT_CFG, reg)
+    
+    // setup Motion threshold to 18*0.063 ~ 1.1G
+    writeReg(FF_MT_THS, 18) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
+    
     MMA8452QSetActive(1)  // Set to active to start reading
-}
-
-function vizXYZ(xyz, level) {
-    local string = ""
-    local val
-    local len
-
-    foreach(val in xyz.asArray()) {
-        len = val / 1024
-        if (len <= 0) {
-            string += vizSpaces.slice(0,16+len)
-            string += vizBars.slice(0,-len)
-        } else {
-            string += vizSpaces.slice(0,16)
-        }
-        string += format("%6.0d",val)
-        if (len > 0) {
-            string += vizBars.slice(0,len)
-            string += vizSpaces.slice(0,16-len)
-        } else{
-            string += vizSpaces.slice(0,16)
-        }
-    }
-    log(format("mag=%11.0d", xyz.magSquared()) + string, level)
-//    log(format("0x%02x",readReg(INT_SOURCE)), 100)
-//    log(format("0x%02x",readReg(CTRL_REG4)), 100)
 }
 
 function pollMMA8452Q() {
     local xyz = readAccelData()
     local mag = xyz.magSquared()
     
-    if (mag > 290000000/256 || mag < 240000000/256) {
-        log(format("%9.3f %9.3f %9.3f", xyz.x, xyz.y, xyz.z),10)
-//        vizXYZ(xyz, 10)
-        wasActive = true
-    }
-    imp.wakeup(accelSamplePeriod, pollMMA8452Q)
+    log(format("%9.3f %9.3f %9.3f %9.3f", mag, xyz.x, xyz.y, xyz.z),10)
+    wasActive = true
 }
 
 ////////////////////////////////////////////////////////
@@ -310,8 +296,7 @@ hardware.pin7.configure(DIGITAL_IN, eventInt2) // interrupt 2 from MMA8452Q
 i2c.configure(CLOCK_SPEED_400_KHZ)
 
 // Register with the server
-imp.configure("MMA8452Q Dice", [], [webscriptioOutputPort], {dieID = "I10100000001", logVerbosity = 100, errorVerbosity = 1000})
-log("imp.configparams.dieID = " + imp.configparams.dieID, 10)
+imp.configure("MMA8452Q Dice", [], [webscriptioOutputPort])
 
 // Send status to know we are alive
 log(">>> BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress(), 0)
@@ -322,7 +307,6 @@ roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
 checkActivity() // kickstart checkActivity, this re-schedules itself every sleepforTimeout seconds
 
 initMMA8452Q()
-pollMMA8452Q()
 
 // No more code to execute so we'll sleep until eventButton() occurs
 // End of code.
