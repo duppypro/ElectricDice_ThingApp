@@ -2,14 +2,14 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-03-13b"
+const versionString = "MMA8452Q Dice v00.01.2013-03-20b"
 webscriptioOutputPort <- OutputPort("webscriptio_dieID_dieValue", "string")
 dieID <- "I10100000001" // FIXME: assign this from a DNS
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
 const sleepforTimeout = 151.0 // seconds with no activity before calling server.sleepfor
-const sleepforDuration = 900 // seconds to stay in deep sleep (wakeup is a reboot)
+const sleepforDuration = 1620.0 // seconds to stay in deep sleep (wakeup is a reboot)
 const accelSamplePeriod = 0.25 // seconds between reads of the XYZ accel data
 
 class AccelXYZ { // A 3 item vector with magnitude squared method
@@ -118,20 +118,6 @@ function roll(dieValue) {
     // Planner will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
     webscriptioOutputPort.set(message)
     log(message,0)
-}
-
-function eventButton() {
-    if (hardware.pin1.read() == 1) {  // FIXME: Experimentally there has been no need for debounce.  The neeed may show up with more testing.
-        log("    buttonState === 1", 200)
-        roll(math.rand() % 6 + 1) // 1 - 6 for a six sided die
-        wasActive = true
-    } else {
-        log("    buttonState === 0", 200)
-    }
-}
-
-function eventInt1() {
-    log("Interrupt 1 changed.", 10)
 }
 
 function eventInt2() {
@@ -283,15 +269,14 @@ function pollMMA8452Q() {
     local mag = xyz.magSquared()
     
     log(format("%9.3f %9.3f %9.3f %9.3f", mag, xyz.x, xyz.y, xyz.z),10)
+    roll(math.rand() % 6 + 1) // 1 - 6 for a six sided die
     wasActive = true
 }
 
 ////////////////////////////////////////////////////////
 // first code starts here
-// Configure pin1 for wakeup with internal pull down.  Connect hardware button from pin1 to VCC
-hardware.pin1.configure(DIGITAL_IN_WAKEUP, eventButton)
-hardware.pin5.configure(DIGITAL_IN, eventInt1) // interrupt 1 from MMA8452Q
-hardware.pin7.configure(DIGITAL_IN, eventInt2) // interrupt 2 from MMA8452Q
+// Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.
+hardware.pin1.configure(DIGITAL_IN_WAKEUP, eventInt2)
 // set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
 i2c.configure(CLOCK_SPEED_400_KHZ)
 
