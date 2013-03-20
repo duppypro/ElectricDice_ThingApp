@@ -2,13 +2,13 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-03-20b"
+const versionString = "MMA8452Q Dice v00.01.2013-03-20d"
 webscriptioOutputPort <- OutputPort("webscriptio_dieID_dieValue", "string")
 dieID <- "I10100000001" // FIXME: assign this from a DNS
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 151.0 // seconds with no activity before calling server.sleepfor
+const sleepforTimeout = 7.0 // seconds with no activity before calling server.sleepfor
 const sleepforDuration = 1620.0 // seconds to stay in deep sleep (wakeup is a reboot)
 const accelSamplePeriod = 0.25 // seconds between reads of the XYZ accel data
 
@@ -70,9 +70,11 @@ const FF_MT_COUNT      = 0x18
 const ASLP_COUNT       = 0x29
 const CTRL_REG1        = 0x2A
     const ASLP_RATE_BIT    = 0x6 // numBits == 2
-        const ASLP_RATE_12p5HZ = 0x01
+        const ASLP_RATE_12p5HZ = 0x1
+        const ASLP_RATE_1p56HZ = 0x3
     const DR_BIT           = 0x3 // numBits == 3
-        const DR_12p5HZ        = 0x05
+        const DR_12p5HZ        = 0x5
+        const DR_1p56HZ        = 0x7
     const LNOISE_BIT       = 0x2
     const F_READ_BIT       = 0x1
     const ACTIVE_BIT       = 0x0
@@ -100,7 +102,7 @@ local i2cRetryPeriod = 1.0 // seconds to wait before retrying a failed i2c opera
 ///////////////////////////////////////////////
 //define functions
 function log(string, level) {
-    local indent = "                                                  ".slice(0, level/10 + 1)
+    local indent = "_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>".slice(0, level/10 + 1)
     if (level <= logVerbosity)
         server.log(indent + string)
     if (level == 0)
@@ -108,7 +110,7 @@ function log(string, level) {
 }
 
 function error(string, level) {
-    local indent = "                                                  ".slice(0, level/10 + 1)
+    local indent = "#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!".slice(0, level/10 + 1)
     if (level <= errorVerbosity)
         server.error(indent + string)
 }
@@ -120,11 +122,6 @@ function roll(dieValue) {
     log(message,0)
 }
 
-function eventInt2() {
-    pollMMA8452Q()
-    //readReg(FF_MT_SRC) // read in order to clear the interrupt
-}
-
 // checkActivity re-schedules itself every sleepforTimeout
 function checkActivity() {
     log("checkActivity() every " + sleepforTimeout + " secs.", 20)
@@ -134,6 +131,9 @@ function checkActivity() {
         imp.wakeup(sleepforTimeout, checkActivity)
     } else {
         log("No activity for " + sleepforTimeout + " to " + sleepforTimeout*2 + " secs.\r\nGoing to deepsleep for " + (sleepforDuration / 60.0) + " minutes.", 10)
+        // Disable data ready interrupts.  Motion interrupts is left enabled in order to wake from sleep
+        // FIXME: this function should not know about MMA8452Q specifics
+        writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 0))
         imp.onidle(function() { server.sleepfor(sleepforDuration) })  // go to deepsleep if button not pressed for sleepforTimeout
     }
 }
@@ -152,6 +152,7 @@ function writeReg(addressToWrite, dataToWrite) {
         if (err == null) {
             error("i2c.write of value " + format("0x%02x", dataToWrite) + " to " + format("0x%02x", addressToWrite) + " failed.", 10)
             imp.sleep(i2cRetryPeriod)
+            error("retry i2c.write", 100)
         }
     }
     return err
@@ -166,6 +167,7 @@ function readSequentialRegs(addressToRead, numBytes) {
         if (data == null) {
             error("i2c.read from " + format("0x%02x", addressToRead) + " of " + numBytes + " byte" + ((numBytes > 1) ? "s" : "") + " failed.", 10)
             imp.sleep(i2cRetryPeriod)
+            error("retry i2c.read", 100)
         }
     }
     return data
@@ -198,27 +200,30 @@ function MMA8452QSetActive(mode) {
 // See the many application notes for more info on setting all of these registers:
 // http://www.freescale.com/webapp/sps/site/prod_summary.jsp?code=MMA8452Q
 function initMMA8452Q() {
+    local reg
+    
     do {
-        local byte = readReg(WHO_AM_I)  // Read WHO_AM_I register
-        if (byte == I_AM_MMA8452Q) {
+        reg = readReg(WHO_AM_I)  // Read WHO_AM_I register
+        if (reg == I_AM_MMA8452Q) {
             log("MMA8452Q is online...", 10)
             break
         } else {
-            error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", byte), 10)
+            error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg), 10)
             imp.sleep(i2cRetryPeriod)
         }
-    } while (true)    
+    } while (true)
+    
     MMA8452QReset() // Sometimes imp card resets and MMA8452Q keeps power
-    // in STANDBY already after RESET  MMA8452QSetActive(0)  // Must be in standby to change registers
-    local reg
+    // in STANDBY already after RESET//MMA8452QSetActive(0)  // Must be in standby to change registers
+
     // Set up the full scale range to 2, 4, or 8g.
     // FIXME: assumes HPF_OUT_BIT in this same register always == 0
     writeReg(XYZ_DATA_CFG, FS_2G)
     
     // setup CTRL_REG1
     reg = readReg(CTRL_REG1)
-    reg = writeBitField(reg, ASLP_RATE_BIT, 2, ASLP_RATE_12p5HZ)
-    reg = writeBitField(reg, DR_BIT, 3, DR_12p5HZ)
+    reg = writeBitField(reg, ASLP_RATE_BIT, 2, ASLP_RATE_1p56HZ)
+    reg = writeBitField(reg, DR_BIT, 3, DR_1p56HZ)
     // leave LNOISE_BIT as default off to save power
     // Set Fast read mode to read 8bits per xyz instead of 12bits
     reg = writeBit(reg, F_READ_BIT, 1)
@@ -245,38 +250,63 @@ function initMMA8452Q() {
     // set all CTRL_REG3 bit fields in one i2c write
     writeReg(CTRL_REG3, reg)
 
-    //Enable interrupts
-    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_FF_MT_BIT, 1))
-
     // setup FF_MT_CFG
     reg = readReg(FF_MT_CFG)
-    // leave ELE_BIT as default disabled
-    // enable Motion detection
+    // enable ELE_BIT to latch FF_MT_SRC events
+    reg = writeBit(reg, ELE_BIT, 1)
+    // enable Motion detection (not Free Fall detection)
     reg = writeBit(reg, OAE_BIT, 1)
     // enable on all axis x, y, and z
     reg = writeBitField(reg, XYZEFE_BIT, 3, XYZEFE_ALL)
     // set all FF_MT_CFG bit fields in one i2c write
     writeReg(FF_MT_CFG, reg)
+    log(format("FF_MT_CFG == 0x%02x", readReg(FF_MT_CFG)), 100)
     
-    // setup Motion threshold to 18*0.063 ~ 1.1G
-    writeReg(FF_MT_THS, 18) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
+    // setup Motion threshold to 32*0.063 ~ 2G
+    writeReg(FF_MT_THS, 32) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
     
+    //Enable Motion interrupts
+    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_FF_MT_BIT, 1))
+    // Enable interrupts on every new data
+    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))
+    log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 100)
+
     MMA8452QSetActive(1)  // Set to active to start reading
 }
 
 function pollMMA8452Q() {
-    local xyz = readAccelData()
-    local mag = xyz.magSquared()
+    local xyz
+    local mag
+    local reg
     
-    log(format("%9.3f %9.3f %9.3f %9.3f", mag, xyz.x, xyz.y, xyz.z),10)
-    roll(math.rand() % 6 + 1) // 1 - 6 for a six sided die
-    wasActive = true
+    reg = readReg(INT_SOURCE)
+    log("INT2",100)
+    while (reg != 0x00) {
+        log(format("INT_SOURCE == 0x%02x", reg), 100)
+        if (readBit(reg, SRC_DRDY_BIT) == 0x1){
+            xyz = readAccelData() // this clears the SRC_DRDY_BIT
+            mag = xyz.magSquared()
+            log(format("mag^2=%9.3f, x=%9.3f, y=%9.3f, z=%9.3f", mag, xyz.x, xyz.y, xyz.z),10)
+        }
+        if (readBit(reg, SRC_FF_MT_BIT) == 0x1){
+            reg = readReg(FF_MT_SRC) // this clears SRC_FF_MT_BIT
+            if (readBit(reg, EA_BIT) == 0x1) {
+                log("Motion Interrupt", 50)
+                wasActive = true
+//                log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 100)
+            } else {
+                error(format("FF_MT_SRC == 0x%02x  why no EA bit?", reg), 100)
+            }
+        }
+        reg = readReg(INT_SOURCE)
+    }
+    log(format("FF_MT_CFG == 0x%02x", readReg(FF_MT_CFG)), 100)
 }
 
 ////////////////////////////////////////////////////////
 // first code starts here
 // Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.
-hardware.pin1.configure(DIGITAL_IN_WAKEUP, eventInt2)
+hardware.pin1.configure(DIGITAL_IN_WAKEUP, pollMMA8452Q)
 // set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
 i2c.configure(CLOCK_SPEED_400_KHZ)
 
@@ -291,7 +321,7 @@ roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
 
 checkActivity() // kickstart checkActivity, this re-schedules itself every sleepforTimeout seconds
 
-initMMA8452Q()
+initMMA8452Q()  // sets up code to run on interrupts from MMA8452Q
 
-// No more code to execute so we'll sleep until eventButton() occurs
+// No more code to execute so we'll sleep until an interrupt from MMA8452Q.
 // End of code.
