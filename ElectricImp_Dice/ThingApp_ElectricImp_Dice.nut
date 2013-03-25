@@ -2,20 +2,17 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-03-20d"
+const versionString = "MMA8452Q Dice v00.01.2013-03-22a"
 webscriptioOutputPort <- OutputPort("webscriptio_dieID_dieValue", "string")
 dieID <- "I10100000001" // FIXME: assign this from a DNS
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 7.0 // seconds with no activity before calling server.sleepfor
+const sleepforTimeout = 170.0 // seconds with no activity before calling server.sleepfor
 const sleepforDuration = 1620.0 // seconds to stay in deep sleep (wakeup is a reboot)
 const accelSamplePeriod = 0.25 // seconds between reads of the XYZ accel data
-
-class AccelXYZ { // A 3 item vector with magnitude squared method
-    x = null; y = null; z = null
-    function magSquared() { return x*x + y*y + z*z } // assuming that square root would take too long
-}
+drdyCountdown <- 25 // log full xyz for this many counts
+drdyCount <- 0 // current count of Coutndown timer
 
 function readBitField(val, bitPosition, numBits){ // works for 8bit and registers
     return (val >> bitPosition) & (0x00FF >> (8 - numBits))
@@ -90,6 +87,7 @@ const CTRL_REG3        = 0x2C
     const WAKE_FF_MT_BIT   = 0x3
     const IPOL_BIT         = 0x1
 const CTRL_REG4        = 0x2D
+    const INT_EN_ASLP_BIT  = 0x7
     const INT_EN_LNDPRT_BIT= 0x4
     const INT_EN_FF_MT_BIT = 0x2
     const INT_EN_DRDY_BIT  = 0x0
@@ -102,7 +100,7 @@ local i2cRetryPeriod = 1.0 // seconds to wait before retrying a failed i2c opera
 ///////////////////////////////////////////////
 //define functions
 function log(string, level) {
-    local indent = "_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>".slice(0, level/10 + 1)
+    local indent = "_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>".slice(0, level/10)
     if (level <= logVerbosity)
         server.log(indent + string)
     if (level == 0)
@@ -110,7 +108,7 @@ function log(string, level) {
 }
 
 function error(string, level) {
-    local indent = "#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!".slice(0, level/10 + 1)
+    local indent = "#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!".slice(0, level/10)
     if (level <= errorVerbosity)
         server.error(indent + string)
 }
@@ -124,6 +122,9 @@ function roll(dieValue) {
 
 // checkActivity re-schedules itself every sleepforTimeout
 function checkActivity() {
+    local reg
+    local val
+    
     log("checkActivity() every " + sleepforTimeout + " secs.", 20)
     log("V = " + hardware.voltage(), 150)
     if (wasActive) {
@@ -133,7 +134,13 @@ function checkActivity() {
         log("No activity for " + sleepforTimeout + " to " + sleepforTimeout*2 + " secs.\r\nGoing to deepsleep for " + (sleepforDuration / 60.0) + " minutes.", 10)
         // Disable data ready interrupts.  Motion interrupts is left enabled in order to wake from sleep
         // FIXME: this function should not know about MMA8452Q specifics
-        writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 0))
+        reg = readReg(CTRL_REG4)
+        do {
+            log(format("CTRL_REG4 == 0x%02x", reg), 100)
+            val = writeBit(reg, INT_EN_DRDY_BIT, 0)
+            writeReg(CTRL_REG4, val)
+            reg = readReg(CTRL_REG4)
+        } while (reg != val)
         imp.onidle(function() { server.sleepfor(sleepforDuration) })  // go to deepsleep if button not pressed for sleepforTimeout
     }
 }
@@ -149,6 +156,7 @@ function writeReg(addressToWrite, dataToWrite) {
     local err = null
     while (err == null) {
         err = i2c.write(MMA8452Q_ADDR << 1, format("%c%c", addressToWrite, dataToWrite))
+        log(format("i2c.write addr=0x%02x data=0x%02x", addressToWrite, dataToWrite), 150)
         if (err == null) {
             error("i2c.write of value " + format("0x%02x", dataToWrite) + " to " + format("0x%02x", addressToWrite) + " failed.", 10)
             imp.sleep(i2cRetryPeriod)
@@ -162,6 +170,7 @@ function writeReg(addressToWrite, dataToWrite) {
 // Continue retry until success.  Caller does not need to check error code
 function readSequentialRegs(addressToRead, numBytes) {
     local data = null
+    
     while (data == null) {
         data = i2c.read(MMA8452Q_ADDR << 1, format("%c", addressToRead), numBytes)
         if (data == null) {
@@ -174,26 +183,53 @@ function readSequentialRegs(addressToRead, numBytes) {
 }
 
 function readAccelData() {
-    local rawData = array(3) // x/y/z accel register data stored here, 3 bytes
-    local dest = AccelXYZ()
+    local rawData = null // x/y/z accel register data stored here, 3 bytes
+    local accelData = array(3)
+    local i
+    local val
+    
     rawData = readSequentialRegs(OUT_X_MSB, 3)  // Read the three raw data registers into data array
-    // above assumes we are in F_READ mode == 1 to read 8 bits per xyz
-    dest.x = (rawData[0] < 128 ? rawData[0] : rawData[0] - 256) / 64.0 // convert to signed float
-    dest.y = (rawData[1] < 128 ? rawData[1] : rawData[1] - 256) / 64.0
-    dest.z = (rawData[2] < 128 ? rawData[2] : rawData[2] - 256) / 64.0
-    return dest
+    foreach (i, val in rawData) {
+        accelData[i] = (val < 128 ? val : val - 256) / 64.0 // convert to signed float
+    }
+    return accelData
 }
 
 // Reset the MMA8452Q
 function MMA8452QReset() {
-    return writeReg(CTRL_REG2, writeBit(readReg(CTRL_REG2), RST_BIT, 1))
+    local reg
+    
+    do {
+        reg = readReg(WHO_AM_I)  // Read WHO_AM_I register
+        if (reg == I_AM_MMA8452Q) {
+            log("Found MMA8452Q.  Sending RST command...", 200)
+            break
+        } else {
+            error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg), 10)
+            imp.sleep(i2cRetryPeriod)
+        }
+    } while (true)
+    
+    // send reset command
+    writeReg(CTRL_REG2, writeBit(readReg(CTRL_REG2), RST_BIT, 1))
+
+    do {
+        reg = readReg(WHO_AM_I)  // Read WHO_AM_I register
+        if (reg == I_AM_MMA8452Q) {
+            log("MMA8452Q is online!", 0)
+            break
+        } else {
+            error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg), 10)
+            imp.sleep(i2cRetryPeriod)
+        }
+    } while (true)
 }
 
 function MMA8452QSetActive(mode) {
     // Sets the MMA8452Q active mode.
     // 0 == STANDBY for changing registers
     // 1 == ACTIVE for outputting data
-    return writeReg(CTRL_REG1, writeBit(readReg(CTRL_REG1), ACTIVE_BIT, mode))
+    writeReg(CTRL_REG1, writeBit(readReg(CTRL_REG1), ACTIVE_BIT, mode))
 }
 
 // Initialize the MMA8452Q registers 
@@ -202,19 +238,9 @@ function MMA8452QSetActive(mode) {
 function initMMA8452Q() {
     local reg
     
-    do {
-        reg = readReg(WHO_AM_I)  // Read WHO_AM_I register
-        if (reg == I_AM_MMA8452Q) {
-            log("MMA8452Q is online...", 10)
-            break
-        } else {
-            error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg), 10)
-            imp.sleep(i2cRetryPeriod)
-        }
-    } while (true)
-    
     MMA8452QReset() // Sometimes imp card resets and MMA8452Q keeps power
-    // in STANDBY already after RESET//MMA8452QSetActive(0)  // Must be in standby to change registers
+    // Must be in standby to change registers
+    // in STANDBY already after RESET//MMA8452QSetActive(0)
 
     // Set up the full scale range to 2, 4, or 8g.
     // FIXME: assumes HPF_OUT_BIT in this same register always == 0
@@ -223,7 +249,7 @@ function initMMA8452Q() {
     // setup CTRL_REG1
     reg = readReg(CTRL_REG1)
     reg = writeBitField(reg, ASLP_RATE_BIT, 2, ASLP_RATE_1p56HZ)
-    reg = writeBitField(reg, DR_BIT, 3, DR_1p56HZ)
+    reg = writeBitField(reg, DR_BIT, 3, DR_12p5HZ)
     // leave LNOISE_BIT as default off to save power
     // Set Fast read mode to read 8bits per xyz instead of 12bits
     reg = writeBit(reg, F_READ_BIT, 1)
@@ -234,7 +260,7 @@ function initMMA8452Q() {
     reg = readReg(CTRL_REG2)
     // set Oversample mode in sleep
     reg = writeBitField(reg, SMODS_BIT, 2, MODS_LOW_POWER)
-    // enable Auto-SLEEP
+    // Enable Auto-SLEEP
     reg = writeBit(reg, SLPE_BIT, 1)
     // set Oversample mode in wake
     reg = writeBitField(reg, MODS_BIT, 2, MODS_LOW_POWER)
@@ -262,13 +288,18 @@ function initMMA8452Q() {
     writeReg(FF_MT_CFG, reg)
     log(format("FF_MT_CFG == 0x%02x", readReg(FF_MT_CFG)), 100)
     
-    // setup Motion threshold to 32*0.063 ~ 2G
-    writeReg(FF_MT_THS, 32) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
+    // setup Motion threshold to 20*0.063.  (16 * 0.63 == 1G)
+    writeReg(FF_MT_THS, 20) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
+
+    // setup sleep counter, the time in multiples of 320ms of no activity to enter sleep mode
+    writeReg(ASLP_COUNT, 100) // 100 * 320ms = 32 seconds
     
+    //Enable Sleep interrupts
+    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_ASLP_BIT, 1))
     //Enable Motion interrupts
     writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_FF_MT_BIT, 1))
     // Enable interrupts on every new data
-    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))
+//    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))
     log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 100)
 
     MMA8452QSetActive(1)  // Set to active to start reading
@@ -276,31 +307,56 @@ function initMMA8452Q() {
 
 function pollMMA8452Q() {
     local xyz
-    local mag
     local reg
-    
-    reg = readReg(INT_SOURCE)
-    log("INT2",100)
-    while (reg != 0x00) {
-        log(format("INT_SOURCE == 0x%02x", reg), 100)
-        if (readBit(reg, SRC_DRDY_BIT) == 0x1){
-            xyz = readAccelData() // this clears the SRC_DRDY_BIT
-            mag = xyz.magSquared()
-            log(format("mag^2=%9.3f, x=%9.3f, y=%9.3f, z=%9.3f", mag, xyz.x, xyz.y, xyz.z),10)
-        }
-        if (readBit(reg, SRC_FF_MT_BIT) == 0x1){
-            reg = readReg(FF_MT_SRC) // this clears SRC_FF_MT_BIT
-            if (readBit(reg, EA_BIT) == 0x1) {
-                log("Motion Interrupt", 50)
-                wasActive = true
-//                log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 100)
-            } else {
-                error(format("FF_MT_SRC == 0x%02x  why no EA bit?", reg), 100)
-            }
-        }
+    local faceValue = "x"
+// facevalue	x	y	z
+//d1	0.000	1.000	0.000
+//d2	0.707	0.000	0.707
+//d3	-0.707	0.000	-0.707
+//d4	0.707	0.000	0.707
+//d5	-0.707	0.000	0.707
+//d6	0.000	-1.000	0.000
+   
+    if (hardware.pin1.read() == 1) { // only react to low to high edge
+        log("INT2 HIGH",180)
+//FIXME:  do we need to check status for data reday in all xyz?//log(format("STATUS == 0x%02x", readReg(STATUS)), 80)
+        log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 200)
         reg = readReg(INT_SOURCE)
+        while (reg != 0x00) {
+            log(format("INT_SOURCE == 0x%02x", reg), 200)
+            if (readBit(reg, SRC_DRDY_BIT) == 0x1){
+                xyz = readAccelData() // this clears the SRC_DRDY_BIT
+                log(format("x=%9.2f, y=%9.2f, z=%9.2f SRC_DRDY_BIT", xyz[0], xyz[1], xyz[2]), 50)
+                drdyCount -= 1
+                if (drdyCount <= 0) {
+                    // stop listening to SRC_DRDY_BIT
+                    MMA8452QSetActive(0)
+                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 0))
+                    MMA8452QSetActive(1)
+                }
+            }
+            if (readBit(reg, SRC_FF_MT_BIT) == 0x1){
+                reg = readReg(FF_MT_SRC) // this clears SRC_FF_MT_BIT
+                if (readBit(reg, EA_BIT) == 0x1) {
+                    wasActive = true
+                    roll(math.rand() % 6 + 1) // 1 - 6 for a six sided die
+                    drdyCount = drdyCountdown // start logging SRC_DRDY_BIT
+                    MMA8452QSetActive(0)
+                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))
+                    MMA8452QSetActive(1)
+                } else {
+                    error(format("FF_MT_SRC == 0x%02x  why no EA bit?", reg), 100)
+                }
+            }
+            if (readBit(reg, SRC_ASLP_BIT) == 0x1){
+                reg = readReg(SYSMOD) // this clears SRC_ASLP_BIT
+                log(format("Entering SYSMOD 0x%02x", reg), 200)
+            }
+            reg = readReg(INT_SOURCE)
+        }
+    } else {
+        log("INT2 LOW", 200)
     }
-    log(format("FF_MT_CFG == 0x%02x", readReg(FF_MT_CFG)), 100)
 }
 
 ////////////////////////////////////////////////////////

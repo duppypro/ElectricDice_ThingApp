@@ -20,8 +20,8 @@ static int baud = 57600;  //must match baud rate of sketch on JeeLink USB stick
 int[] inXYZ = new int[3];  // raw values from string to int
 
 int diceId = 0;
-static int diceIdMin = 1;
-static int diceIdMax = 2;
+static int diceIdMin = 7;
+static int diceIdMax = 8;
 static int numDice = diceIdMax + 1 - diceIdMin;
 String[] pubNubDiceId = new String[numDice];
 //pubNubDieId[0] = "J10100000001"  // Jeelink nodeId 6
@@ -38,8 +38,8 @@ import processing.net.*;
 Client client;
 int numGETsBeforeStop = 37;
 int pubCount = numGETsBeforeStop;
-int testPeriod = 1500; // milliseconds between send test messages (sent during idle)
-int idleTimeout = 5000; // milliseconds of no JeeLink msg recvd before going to idle
+int testPeriod = 15000; // milliseconds between send test messages (sent during idle)
+int idleTimeout = 10000; // milliseconds of no JeeLink msg recvd before going to idle
 int throttleDelay = 1; // milliseconds after client.stop() FIXME:I'm still seeing java.net.SocketException: even with this delay
 // keys for myinternetdice@gmail.com
 //static String pubNubPubKey = "pub-1b4e9e64-d3c7-452d-a730-6e3bf9368653"; SECRET
@@ -286,12 +286,12 @@ void serialEvent (Serial myPort) {
 //  print("RAW:"); print(rawString);
   String[] nums = splitTokens(rawString);
 
-print(nums[0]);
+//  print(nums[0]);
+//  print(nums[1]);
 
-  if (nums[0].equals("OK")) {
+   if (nums[0].equals("OK")) {
     diceId = int(nums[1]) - diceIdMin;
     lastSerialMsg[diceId] = millis();
-   
     for (int i = 0; i < 3; i = i+1) {
       int j = 2+2*i; // position in text string of gravity axes values
       int hi = int(nums[j+1]);
@@ -326,6 +326,7 @@ print(nums[0]);
       roll = "2";
 
     diceRoll[diceId] = roll;
+//    print(roll);
 //    print(" " + diceId + "=["+roll+"]");
 //    print(" Mag:" + nfp(inPVMag[diceId], 4));
 //    print(" <" + nfp(inXYZ[0],3) +","+ nfp(inXYZ[1],3) +","+ nfp(inXYZ[2],3) + ">");
