@@ -2,17 +2,20 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-03-22a"
+const versionString = "MMA8452Q Dice v00.01.2013-03-27a"
 webscriptioOutputPort <- OutputPort("webscriptio_dieID_dieValue", "string")
 dieID <- "I10100000001" // FIXME: assign this from a DNS
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 170.0 // seconds with no activity before calling server.sleepfor
-const sleepforDuration = 1620.0 // seconds to stay in deep sleep (wakeup is a reboot)
-const accelSamplePeriod = 0.25 // seconds between reads of the XYZ accel data
-drdyCountdown <- 25 // log full xyz for this many counts
+const sleepforTimeout = 360.0 // seconds with no activity before calling server.sleepfor
+const sleepforDuration = 36000.0 // seconds to stay in deep sleep (wakeup is a reboot)
+drdyCountdown <- 50 // log full xyz for this many counts
 drdyCount <- 0 // current count of Coutndown timer
+lastFaceValue <- "x"
+lastAccelData <- [0, 0, 0]
+const accelChangeThresh = 50 // change in accel per sample to count as movement.  Units of milliGs
+pollMMA8452QBusy <- false // guard against interrupt handler collisions FIXME: Is this necessary?  Debugging why I get no EA_BIT set error sometimes
 
 function readBitField(val, bitPosition, numBits){ // works for 8bit and registers
     return (val >> bitPosition) & (0x00FF >> (8 - numBits))
@@ -122,9 +125,6 @@ function roll(dieValue) {
 
 // checkActivity re-schedules itself every sleepforTimeout
 function checkActivity() {
-    local reg
-    local val
-    
     log("checkActivity() every " + sleepforTimeout + " secs.", 20)
     log("V = " + hardware.voltage(), 150)
     if (wasActive) {
@@ -134,16 +134,15 @@ function checkActivity() {
         log("No activity for " + sleepforTimeout + " to " + sleepforTimeout*2 + " secs.\r\nGoing to deepsleep for " + (sleepforDuration / 60.0) + " minutes.", 10)
         // Disable data ready interrupts.  Motion interrupts is left enabled in order to wake from sleep
         // FIXME: this function should not know about MMA8452Q specifics
-        reg = readReg(CTRL_REG4)
-        do {
-            log(format("CTRL_REG4 == 0x%02x", reg), 100)
-            val = writeBit(reg, INT_EN_DRDY_BIT, 0)
-            writeReg(CTRL_REG4, val)
-            reg = readReg(CTRL_REG4)
-        } while (reg != val)
-        imp.onidle(function() { server.sleepfor(sleepforDuration) })  // go to deepsleep if button not pressed for sleepforTimeout
+        MMA8452QSetActive(0) // Can't write MMA8452Q until not active
+        writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 0)) // turn off SRC_DRDY_BIT so it doesnt wake us up
+        writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_ASLP_BIT, 0)) // turn off SRC_ASLP_BIT so it doesnt wake us up
+        // Make harder to wakeup. set Motion threshold to 32*0.063.  (16 * 0.063 == 1G)
+        //writeReg(FF_MT_THS, 32) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
+        MMA8452QSetActive(1) // set to Active mode so tht SRC_FF_MT_BIT can wake us up
+        imp.onidle(function() { server.sleepfor(sleepforDuration) })  // go to deepsleep if no MMA8452Q interrupts for sleepforTimeout
     }
-}
+} // checkActivity
 
 // Read a single byte from addressToRead and return it as a byte.  (The '[0]' causes a byte to return)
 function readReg(addressToRead) {
@@ -190,7 +189,7 @@ function readAccelData() {
     
     rawData = readSequentialRegs(OUT_X_MSB, 3)  // Read the three raw data registers into data array
     foreach (i, val in rawData) {
-        accelData[i] = (val < 128 ? val : val - 256) / 64.0 // convert to signed float
+        accelData[i] = math.floor(1000.0 * ((val < 128 ? val : val - 256) / 64.0)) // convert to signed integer milliGs
     }
     return accelData
 }
@@ -232,10 +231,10 @@ function MMA8452QSetActive(mode) {
     writeReg(CTRL_REG1, writeBit(readReg(CTRL_REG1), ACTIVE_BIT, mode))
 }
 
+function initMMA8452Q() {
 // Initialize the MMA8452Q registers 
 // See the many application notes for more info on setting all of these registers:
 // http://www.freescale.com/webapp/sps/site/prod_summary.jsp?code=MMA8452Q
-function initMMA8452Q() {
     local reg
     
     MMA8452QReset() // Sometimes imp card resets and MMA8452Q keeps power
@@ -261,7 +260,9 @@ function initMMA8452Q() {
     // set Oversample mode in sleep
     reg = writeBitField(reg, SMODS_BIT, 2, MODS_LOW_POWER)
     // Enable Auto-SLEEP
-    reg = writeBit(reg, SLPE_BIT, 1)
+    //reg = writeBit(reg, SLPE_BIT, 1)
+    // Disable Auto-SLEEP
+    reg = writeBit(reg, SLPE_BIT, 0)
     // set Oversample mode in wake
     reg = writeBitField(reg, MODS_BIT, 2, MODS_LOW_POWER)
     // set all CTRL_REG2 bit fields in one i2c write
@@ -288,76 +289,174 @@ function initMMA8452Q() {
     writeReg(FF_MT_CFG, reg)
     log(format("FF_MT_CFG == 0x%02x", readReg(FF_MT_CFG)), 100)
     
-    // setup Motion threshold to 20*0.063.  (16 * 0.63 == 1G)
-    writeReg(FF_MT_THS, 20) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
+    // setup Motion threshold to 32*0.063.  (16 * 0.063 == 1G)
+    writeReg(FF_MT_THS, 32) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
 
     // setup sleep counter, the time in multiples of 320ms of no activity to enter sleep mode
-    writeReg(ASLP_COUNT, 100) // 100 * 320ms = 32 seconds
+    //dont' use ASLP_COUNT for now, use change in prev AccelData reading
+    //writeReg(ASLP_COUNT, 10) // 10 * 320ms = 3.2 seconds
     
     //Enable Sleep interrupts
-    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_ASLP_BIT, 1))
+//    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_ASLP_BIT, 1))
     //Enable Motion interrupts
     writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_FF_MT_BIT, 1))
     // Enable interrupts on every new data
-//    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))
+    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))
     log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 100)
 
     MMA8452QSetActive(1)  // Set to active to start reading
+} // initMMA8452Q
+
+function isDiffAccelData(xyz1, xyz2) {
+    local i, val
+
+    foreach (i, val in xyz1) {
+//        log(format("isDiffAccelData %d %3.2f", i, math.abs(xyz1[i] - xyz2[i])), 200)
+        if (math.abs(xyz1[i] - xyz2[i]) > accelChangeThresh) {
+            return true
+        }
+    }
+    return false
 }
+
+function accelData2FaceValue(xyz) {
+    local faceValue = "s"
+    local snapAngle = ""
+
+//<=-0.86    <=-.59    <=-0.25	<=0.26	<=.60	<=.87	<= 1.1
+//-1.00 	-0.707	x	    0	    x	    0.707	1
+    foreach(val in xyz) {
+        if (val <= -850) {
+            snapAngle += "a"
+        } else if (val <= -400) {
+            snapAngle += "b"
+        } else if (val <= -350) {
+            snapAngle += "x"
+        } else if (val <= 350) {
+            snapAngle += "0"
+        } else if (val <= 400) {
+            snapAngle += "x"
+        } else if (val <= 850) {
+            snapAngle += "c"
+        } else {
+            snapAngle += "d"
+        }
+    }
+// facevalue	x	y	z           x*x + z*z
+//d1	0.000	1.000	0.000           0
+//d2	0.707	0.000	-0.707          1
+//d3	-0.707	0.000	-0.707          1
+//d4	0.707	0.000	0.707
+//d5	-0.707	0.000	0.707
+//d6	0.000	-1.000	0.000
+    // determine dice roll value (what side is up?)
+// try this method below instead? create xz axis by x*x + z*z 
+    //    roll = "x";
+//    if (abs(inXYZ[1])<oneGAxis && abs(inXYZ[2])<oneGAxis && inXYZ[0] < xNegOneG)
+//      roll = "3";
+//    if (abs(inXYZ[1])<oneGAxis && abs(inXYZ[2])<oneGAxis && inXYZ[0] > xPosOneG)
+//      roll = "4";
+//    if (abs(inXYZ[0])<oneGAxis && abs(inXYZ[2])<oneGAxis && inXYZ[1] < yNegOneG)
+//      roll = "1";
+//    if (abs(inXYZ[0])<oneGAxis && abs(inXYZ[2])<oneGAxis && inXYZ[1] > yPosOneG)
+//      roll = "6";
+//    if (abs(inXYZ[0])<oneGAxis && abs(inXYZ[1])<oneGAxis && inXYZ[2] < zNegOneG)
+//      roll = "5";
+//    if (abs(inXYZ[0])<oneGAxis && abs(inXYZ[1])<oneGAxis && inXYZ[2] > zPosOneG)
+//      roll = "2";
+      
+    switch (snapAngle) {
+        case "0d0":
+            faceValue = "1"
+            break
+        case "c0b":
+            faceValue = "2"
+            break
+        case "b0b":
+            faceValue = "3"
+            break
+        case "c0c":
+            faceValue = "4"
+            break
+        case "b0c":
+            faceValue = "5"
+            break
+        case "0a0":
+            faceValue = "6"
+            break
+        default:
+            faceValue = "x"
+    }
+    return faceValue
+} // accelData2FaceValue
 
 function pollMMA8452Q() {
     local xyz
     local reg
-    local faceValue = "x"
-// facevalue	x	y	z
-//d1	0.000	1.000	0.000
-//d2	0.707	0.000	0.707
-//d3	-0.707	0.000	-0.707
-//d4	0.707	0.000	0.707
-//d5	-0.707	0.000	0.707
-//d6	0.000	-1.000	0.000
-   
+    local faceValue = lastFaceValue    
+
+    while (pollMMA8452QBusy) {
+        log("pollMMA8452QBusy collision", 50)
+        // wait herer unitl other instance of int handler is done
+    }
+    pollMMA8452QBusy = true // mark as busy
     if (hardware.pin1.read() == 1) { // only react to low to high edge
-        log("INT2 HIGH",180)
-//FIXME:  do we need to check status for data reday in all xyz?//log(format("STATUS == 0x%02x", readReg(STATUS)), 80)
-        log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 200)
+//FIXME:  do we need to check status for data ready in all xyz?//log(format("STATUS == 0x%02x", readReg(STATUS)), 80)
         reg = readReg(INT_SOURCE)
         while (reg != 0x00) {
             log(format("INT_SOURCE == 0x%02x", reg), 200)
-            if (readBit(reg, SRC_DRDY_BIT) == 0x1){
+            if (readBit(reg, SRC_DRDY_BIT) == 0x1) {
                 xyz = readAccelData() // this clears the SRC_DRDY_BIT
-                log(format("x=%9.2f, y=%9.2f, z=%9.2f SRC_DRDY_BIT", xyz[0], xyz[1], xyz[2]), 50)
-                drdyCount -= 1
-                if (drdyCount <= 0) {
+                faceValue = accelData2FaceValue(xyz)
+                if (faceValue != lastFaceValue) {
+                    roll(faceValue)
+                    lastFaceValue = faceValue
+                }
+                if (isDiffAccelData(lastAccelData, xyz)) {
+                    wasActive = true
+                    imp.setpowersave(false) //wake up for low latency
+                    drdyCount = drdyCountdown // FIXME: these 3 lines are same as in SRC_FF_MT_BIT handler
+                    log(format("x=%9.2f, y=%9.2f, z=%9.2f SRC_DRDY_BIT", xyz[0], xyz[1], xyz[2]), 200)
+                }
+                lastAccelData = xyz
+                if (drdyCount > 0) {
+                    if (drdyCount % 10 == 0) {
+                        log("drdyCount " + drdyCount, 200)
+                    }
+                    drdyCount -= 1
+                }
+                if (drdyCount == 0) {
+                    imp.setpowersave(true) // go to low power because we have not moved for drdyCountdown samples
                     // stop listening to SRC_DRDY_BIT
-                    MMA8452QSetActive(0)
-                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 0))
-                    MMA8452QSetActive(1)
+//                    MMA8452QSetActive(0)
+//                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 0))
+//                    MMA8452QSetActive(1)
                 }
             }
-            if (readBit(reg, SRC_FF_MT_BIT) == 0x1){
+            if (readBit(reg, SRC_FF_MT_BIT) == 0x1) {
                 reg = readReg(FF_MT_SRC) // this clears SRC_FF_MT_BIT
                 if (readBit(reg, EA_BIT) == 0x1) {
                     wasActive = true
-                    roll(math.rand() % 6 + 1) // 1 - 6 for a six sided die
+                    imp.setpowersave(false) //wake up for low latency
                     drdyCount = drdyCountdown // start logging SRC_DRDY_BIT
-                    MMA8452QSetActive(0)
-                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))
-                    MMA8452QSetActive(1)
+//                    MMA8452QSetActive(0)
+//                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))  // listen for SRC_DRDY_BIT interrupts
+//                    MMA8452QSetActive(1)
                 } else {
                     error(format("FF_MT_SRC == 0x%02x  why no EA bit?", reg), 100)
                 }
             }
-            if (readBit(reg, SRC_ASLP_BIT) == 0x1){
+            if (readBit(reg, SRC_ASLP_BIT) == 0x1) {
                 reg = readReg(SYSMOD) // this clears SRC_ASLP_BIT
-                log(format("Entering SYSMOD 0x%02x", reg), 200)
+                log(format("Entering SYSMOD 0x%02x", reg), 100)
             }
             reg = readReg(INT_SOURCE)
-        }
+        } // while (reg != 0x00)
     } else {
-        log("INT2 LOW", 200)
+//        log("INT2 LOW", 200)
     }
-}
+    pollMMA8452QBusy = false // clear so other inst of int handler can run
+} // pollMMA8452Q
 
 ////////////////////////////////////////////////////////
 // first code starts here
@@ -378,6 +477,7 @@ roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
 checkActivity() // kickstart checkActivity, this re-schedules itself every sleepforTimeout seconds
 
 initMMA8452Q()  // sets up code to run on interrupts from MMA8452Q
+pollMMA8452Q()  // call first time to get a roll value on boot.
 
 // No more code to execute so we'll sleep until an interrupt from MMA8452Q.
 // End of code.
