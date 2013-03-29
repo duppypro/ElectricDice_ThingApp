@@ -1,12 +1,15 @@
 /* Electric Dice using MMA8452Q accelerometer */
+/* ThingApp Imp Device Squirrel code */
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-03-27b"
-webscriptioOutputPort <- OutputPort("webscriptio_dieID_dieValue", "string")
-dieID <- "I10100000001" // FIXME: assign this from a DNS
+const versionString = "MMA8452Q Dice v00.01.2013-03-29a"
+const logIndent   = "Device_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
+const errorIndent = "Device#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
+
+dieID <- "unknown" // this will be assigned by agent
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
 const sleepforTimeout = 360.0 // seconds with no activity before calling server.sleepfor
 const sleepforDuration = 36000.0 // seconds to stay in deep sleep (wakeup is a reboot)
@@ -16,19 +19,6 @@ lastFaceValue <- "x"
 lastAccelData <- [0, 0, 0]
 const accelChangeThresh = 50 // change in accel per sample to count as movement.  Units of milliGs
 pollMMA8452QBusy <- false // guard against interrupt handler collisions FIXME: Is this necessary?  Debugging why I get no EA_BIT set error sometimes
-
-function readBitField(val, bitPosition, numBits){ // works for 8bit and registers
-    return (val >> bitPosition) & (0x00FF >> (8 - numBits))
-}
-
-function readBit(val, bitPosition) { return readBitField(val, bitPosition, 1) }
-
-function writeBitField(val, bitPosition, numBits, newVal) { // works for 8bit registers
-// newVal is not bounds checked
-    return (val & (((0x00FF >> (8 - numBits)) << bitPosition) ^ 0x00FF)) | (newVal << bitPosition)
-}
-
-function writeBit(val, bitPosition, newVal) { return writeBitField(val, bitPosition, 1, newVal) }
 
 ///////////////////////////////////////////////
 // constants for MMA8452Q i2c registers
@@ -103,7 +93,7 @@ local i2cRetryPeriod = 1.0 // seconds to wait before retrying a failed i2c opera
 ///////////////////////////////////////////////
 //define functions
 function log(string, level) {
-    local indent = "_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>".slice(0, level/10)
+    local indent = logIndent.slice(0, level / 10 + 6)
     if (level <= logVerbosity)
         server.log(indent + string)
     if (level == 0)
@@ -111,16 +101,31 @@ function log(string, level) {
 }
 
 function error(string, level) {
-    local indent = "#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!".slice(0, level/10)
+    local indent = errorIndent.slice(0, level / 10 + 6)
     if (level <= errorVerbosity)
         server.error(indent + string)
 }
 
+function readBitField(val, bitPosition, numBits){ // works for 8bit and registers
+    return (val >> bitPosition) & (0x00FF >> (8 - numBits))
+}
+
+function readBit(val, bitPosition) { return readBitField(val, bitPosition, 1) }
+
+function writeBitField(val, bitPosition, numBits, newVal) { // works for 8bit registers
+// newVal is not bounds checked
+    return (val & (((0x00FF >> (8 - numBits)) << bitPosition) ^ 0x00FF)) | (newVal << bitPosition)
+}
+
+function writeBit(val, bitPosition, newVal) { return writeBitField(val, bitPosition, 1, newVal) }
+
 function roll(dieValue) {
-    local message = dieID + "," + dieValue
-    // Planner will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
-    webscriptioOutputPort.set(message)
-    log(message,0)
+    local tableDieEvent = {}
+    tableDieEvent.dieID <- dieID
+    tableDieEvent.roll <- dieValue
+    // Agent will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
+    log(dieID + " rolls a " + dieValue, 0)
+    agent.send("dieEvent", tableDieEvent)
 }
 
 // checkActivity re-schedules itself every sleepforTimeout
@@ -311,7 +316,6 @@ function isDiffAccelData(xyz1, xyz2) {
     local i, val
 
     foreach (i, val in xyz1) {
-//        log(format("isDiffAccelData %d %3.2f", i, math.abs(xyz1[i] - xyz2[i])), 200)
         if (math.abs(xyz1[i] - xyz2[i]) > accelChangeThresh) {
             return true
         }
@@ -319,7 +323,7 @@ function isDiffAccelData(xyz1, xyz2) {
     return false
 }
 
-function accelData2FaceValue(xyz) {
+function getFaceValueFromAccelData(xyz) {
     local faceValue = "s"
     local snapAngle = ""
 
@@ -407,7 +411,7 @@ function pollMMA8452Q() {
             log(format("INT_SOURCE == 0x%02x", reg), 200)
             if (readBit(reg, SRC_DRDY_BIT) == 0x1) {
                 xyz = readAccelData() // this clears the SRC_DRDY_BIT
-                faceValue = accelData2FaceValue(xyz)
+                faceValue = getFaceValueFromAccelData(xyz)
                 if (faceValue != lastFaceValue) {
                     roll(faceValue)
                     lastFaceValue = faceValue
@@ -460,23 +464,33 @@ function pollMMA8452Q() {
 
 ////////////////////////////////////////////////////////
 // first code starts here
+
+// Register with the server
+imp.configure("MMA8452Q Dice using Agent messages", [], [])
+// no in and out []s anymore, using Agent messages
+
+// Send status to know we are alive
+log("BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress(), 0)
+
+agent.on("setDieID", function(newDieID) {
+    log("received setDieID " + newDieID, 100)
+    dieID = newDieID
+})
+
+agent.send("GetDieIDFromImpeeID", hardware.getimpeeid())
+
+// roll every time we boot just for some debug activity
+roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
+
 // Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.
 hardware.pin1.configure(DIGITAL_IN_WAKEUP, pollMMA8452Q)
 // set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
 i2c.configure(CLOCK_SPEED_400_KHZ)
-
-// Register with the server
-imp.configure("MMA8452Q Dice", [], [webscriptioOutputPort])
-
-// Send status to know we are alive
-log(">>> BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress(), 0)
-
-// roll every time we boot just for some idle activity
-roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
+initMMA8452Q()  // sets up code to run on interrupts from MMA8452Q
 
 checkActivity() // kickstart checkActivity, this re-schedules itself every sleepforTimeout seconds
+// FIXME: checkActivity waits from sleepforTimeout to sleepforTimeout*2.  Make this more constant.
 
-initMMA8452Q()  // sets up code to run on interrupts from MMA8452Q
 pollMMA8452Q()  // call first time to get a roll value on boot.
 
 // No more code to execute so we'll sleep until an interrupt from MMA8452Q.
