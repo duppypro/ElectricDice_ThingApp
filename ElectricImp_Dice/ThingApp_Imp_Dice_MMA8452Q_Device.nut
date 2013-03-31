@@ -3,7 +3,7 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-03-29b"
+const versionString = "MMA8452Q Dice v00.01.2013-03-30a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
@@ -87,8 +87,9 @@ const CTRL_REG4        = 0x2D
 const CTRL_REG5        = 0x2E
 
 // helper variables for MMA8452Q. These are not const because they may have reason to change dynamically.
-local i2c = hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
-local i2cRetryPeriod = 1.0 // seconds to wait before retrying a failed i2c operation
+i2c <- hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
+vBatt <- hardware.pin5 // now we can use vBatt.read()
+i2cRetryPeriod <- 1.0 // seconds to wait before retrying a failed i2c operation
 
 ///////////////////////////////////////////////
 //define functions
@@ -112,7 +113,7 @@ function error(string, level) {
 function checkActivity() {
     log("checkActivity() every " + sleepforTimeout + " secs.", 20)
     // let the agent know we are still alive
-    agent.send("dieEvent", { "keepAlive": true })
+    agent.send("dieEvent", { "keepAlive": true, "vBatt": getVBatt() })
     log("V = " + hardware.voltage(), 150)
     if (wasActive) {
         wasActive = false
@@ -474,6 +475,10 @@ function pollMMA8452Q() {
     pollMMA8452QBusy = false // clear so other inst of int handler can run
 } // pollMMA8452Q
 
+function getVBatt() {
+    return (2 * vBatt.read() / 65535.0) * hardware.voltage()
+}
+
 ////////////////////////////////////////////////////////
 // first code starts here
 
@@ -489,6 +494,8 @@ roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
 
 // Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.
 hardware.pin1.configure(DIGITAL_IN_WAKEUP, pollMMA8452Q)
+// Configure pin5 as ADC to read Vbatt/2.0
+vBatt.configure(ANALOG_IN)
 // set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
 i2c.configure(CLOCK_SPEED_400_KHZ)
 initMMA8452Q()  // sets up code to run on interrupts from MMA8452Q
