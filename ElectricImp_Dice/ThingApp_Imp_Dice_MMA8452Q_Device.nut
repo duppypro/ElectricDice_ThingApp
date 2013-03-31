@@ -3,16 +3,16 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-03-29a"
-const logIndent   = "Device_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
-const errorIndent = "Device#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
+const versionString = "MMA8452Q Dice v00.01.2013-03-29b"
+const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
+const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
-
-dieID <- "unknown" // this will be assigned by agent
+impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 360.0 // seconds with no activity before calling server.sleepfor
+const sleepforTimeout = 22//360.0 // seconds with no activity before calling server.sleepfor
 const sleepforDuration = 36000.0 // seconds to stay in deep sleep (wakeup is a reboot)
+
 drdyCountdown <- 50 // log full xyz for this many counts
 drdyCount <- 0 // current count of Coutndown timer
 lastFaceValue <- "x"
@@ -92,8 +92,10 @@ local i2cRetryPeriod = 1.0 // seconds to wait before retrying a failed i2c opera
 
 ///////////////////////////////////////////////
 //define functions
+
+// start with fairly generic functions
 function log(string, level) {
-    local indent = logIndent.slice(0, level / 10 + 6)
+    local indent = logIndent.slice(0, level / 10 + 7)
     if (level <= logVerbosity)
         server.log(indent + string)
     if (level == 0)
@@ -101,36 +103,16 @@ function log(string, level) {
 }
 
 function error(string, level) {
-    local indent = errorIndent.slice(0, level / 10 + 6)
+    local indent = errorIndent.slice(0, level / 10 + 7)
     if (level <= errorVerbosity)
         server.error(indent + string)
-}
-
-function readBitField(val, bitPosition, numBits){ // works for 8bit and registers
-    return (val >> bitPosition) & (0x00FF >> (8 - numBits))
-}
-
-function readBit(val, bitPosition) { return readBitField(val, bitPosition, 1) }
-
-function writeBitField(val, bitPosition, numBits, newVal) { // works for 8bit registers
-// newVal is not bounds checked
-    return (val & (((0x00FF >> (8 - numBits)) << bitPosition) ^ 0x00FF)) | (newVal << bitPosition)
-}
-
-function writeBit(val, bitPosition, newVal) { return writeBitField(val, bitPosition, 1, newVal) }
-
-function roll(dieValue) {
-    local tableDieEvent = {}
-    tableDieEvent.dieID <- dieID
-    tableDieEvent.roll <- dieValue
-    // Agent will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
-    log(dieID + " rolls a " + dieValue, 0)
-    agent.send("dieEvent", tableDieEvent)
 }
 
 // checkActivity re-schedules itself every sleepforTimeout
 function checkActivity() {
     log("checkActivity() every " + sleepforTimeout + " secs.", 20)
+    // let the agent know we are still alive
+    agent.send("dieEvent", { "keepAlive": true })
     log("V = " + hardware.voltage(), 150)
     if (wasActive) {
         wasActive = false
@@ -147,7 +129,22 @@ function checkActivity() {
         MMA8452QSetActive(1) // set to Active mode so tht SRC_FF_MT_BIT can wake us up
         imp.onidle(function() { server.sleepfor(sleepforDuration) })  // go to deepsleep if no MMA8452Q interrupts for sleepforTimeout
     }
-} // checkActivity
+} // checkActivity FIXME: checkActivity should be more generic
+
+// now functions specific to devices that read i2c registers
+
+function readBitField(val, bitPosition, numBits){ // works for 8bit and registers
+    return (val >> bitPosition) & (0x00FF >> (8 - numBits))
+}
+
+function readBit(val, bitPosition) { return readBitField(val, bitPosition, 1) }
+
+function writeBitField(val, bitPosition, numBits, newVal) { // works for 8bit registers
+// newVal is not bounds checked
+    return (val & (((0x00FF >> (8 - numBits)) << bitPosition) ^ 0x00FF)) | (newVal << bitPosition)
+}
+
+function writeBit(val, bitPosition, newVal) { return writeBitField(val, bitPosition, 1, newVal) }
 
 // Read a single byte from addressToRead and return it as a byte.  (The '[0]' causes a byte to return)
 function readReg(addressToRead) {
@@ -185,6 +182,8 @@ function readSequentialRegs(addressToRead, numBytes) {
     }
     return data
 }
+
+// now functions unique to MMA8452Q
 
 function readAccelData() {
     local rawData = null // x/y/z accel register data stored here, 3 bytes
@@ -311,6 +310,19 @@ function initMMA8452Q() {
 
     MMA8452QSetActive(1)  // Set to active to start reading
 } // initMMA8452Q
+
+// now die specific functions
+
+function roll(dieValue) {
+    local tableDieEvent = {
+        "impeeID": impeeID,
+        "roll": dieValue
+        }
+
+    // Agent will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
+    log(impeeID + " rolls a " + dieValue, 120)
+    agent.send("dieEvent", tableDieEvent)
+}
 
 function isDiffAccelData(xyz1, xyz2) {
     local i, val
@@ -471,13 +483,6 @@ imp.configure("MMA8452Q Dice using Agent messages", [], [])
 
 // Send status to know we are alive
 log("BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress(), 0)
-
-agent.on("setDieID", function(newDieID) {
-    log("received setDieID " + newDieID, 100)
-    dieID = newDieID
-})
-
-agent.send("GetDieIDFromImpeeID", hardware.getimpeeid())
 
 // roll every time we boot just for some debug activity
 roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
