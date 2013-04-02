@@ -3,15 +3,15 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-03-30a"
+const versionString = "MMA8452Q Dice v00.01.2013-04-01a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 22//360.0 // seconds with no activity before calling server.sleepfor
-const sleepforDuration = 36000.0 // seconds to stay in deep sleep (wakeup is a reboot)
+const sleepforTimeout = 44//360.0 // seconds with no activity before calling server.sleepfor
+const sleepforDuration = 600//3600.0 // seconds to stay in deep sleep (wakeup is a reboot)
 
 drdyCountdown <- 50 // log full xyz for this many counts
 drdyCount <- 0 // current count of Coutndown timer
@@ -109,12 +109,13 @@ function error(string, level) {
         server.error(indent + string)
 }
 
-// checkActivity re-schedules itself every sleepforTimeout
 function checkActivity() {
-    log("checkActivity() every " + sleepforTimeout + " secs.", 20)
+// checkActivity re-schedules itself every sleepforTimeout
+// FIXME: checkActivity should be more generic
+    log("checkActivity() every " + sleepforTimeout + " secs.", 120)
     // let the agent know we are still alive
     agent.send("dieEvent", { "keepAlive": true, "vBatt": getVBatt() })
-    log("V = " + hardware.voltage(), 150)
+    log("V = " + hardware.voltage(), 100)
     if (wasActive) {
         wasActive = false
         imp.wakeup(sleepforTimeout, checkActivity)
@@ -130,7 +131,7 @@ function checkActivity() {
         MMA8452QSetActive(1) // set to Active mode so tht SRC_FF_MT_BIT can wake us up
         imp.onidle(function() { server.sleepfor(sleepforDuration) })  // go to deepsleep if no MMA8452Q interrupts for sleepforTimeout
     }
-} // checkActivity FIXME: checkActivity should be more generic
+} // checkActivity
 
 // now functions specific to devices that read i2c registers
 
@@ -220,7 +221,7 @@ function MMA8452QReset() {
     do {
         reg = readReg(WHO_AM_I)  // Read WHO_AM_I register
         if (reg == I_AM_MMA8452Q) {
-            log("MMA8452Q is online!", 0)
+            log("MMA8452Q is online!", 150)
             break
         } else {
             error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg), 10)
@@ -292,7 +293,7 @@ function initMMA8452Q() {
     reg = writeBitField(reg, XYZEFE_BIT, 3, XYZEFE_ALL)
     // set all FF_MT_CFG bit fields in one i2c write
     writeReg(FF_MT_CFG, reg)
-    log(format("FF_MT_CFG == 0x%02x", readReg(FF_MT_CFG)), 100)
+    log(format("FF_MT_CFG == 0x%02x", readReg(FF_MT_CFG)), 150)
     
     // setup Motion threshold to 32*0.063.  (16 * 0.063 == 1G)
     writeReg(FF_MT_THS, 32) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
@@ -307,7 +308,7 @@ function initMMA8452Q() {
     writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_FF_MT_BIT, 1))
     // Enable interrupts on every new data
     writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))
-    log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 100)
+    log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 150)
 
     MMA8452QSetActive(1)  // Set to active to start reading
 } // initMMA8452Q
@@ -476,7 +477,27 @@ function pollMMA8452Q() {
 } // pollMMA8452Q
 
 function getVBatt() {
-    return (2 * vBatt.read() / 65535.0) * hardware.voltage()
+    local tableVBatt = {
+        "min": 10,
+        "max": 0,
+        "avg": 0,
+        "count": 3
+    }
+    local i = tableVBatt.count
+    local voltage = 0
+    
+    // throw out first measurement. Experimentally first measurement is >5% low
+    vBatt.read() 
+    // read count times and save min, max, and average
+    while (i){
+        voltage = (2 * vBatt.read() / 65535.0) * hardware.voltage()
+        if (voltage < tableVBatt.min) { tableVBatt.min = voltage }
+        if (voltage > tableVBatt.max) { tableVBatt.max = voltage }
+        tableVBatt.avg = tableVBatt.avg + voltage
+        i = i - 1
+    }
+    tableVBatt.avg = tableVBatt.avg / tableVBatt.count
+    return tableVBatt
 }
 
 ////////////////////////////////////////////////////////
