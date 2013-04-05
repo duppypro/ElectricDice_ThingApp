@@ -3,15 +3,15 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-04-01a"
+const versionString = "MMA8452Q Dice v00.01.2013-04-04a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 44//360.0 // seconds with no activity before calling server.sleepfor
-const sleepforDuration = 600//3600.0 // seconds to stay in deep sleep (wakeup is a reboot)
+const sleepforTimeout = 360.0 // seconds with no activity before calling server.sleepfor
+const sleepforDuration = 3500.0 // seconds to stay in deep sleep (wakeup is a reboot)
 
 drdyCountdown <- 50 // log full xyz for this many counts
 drdyCount <- 0 // current count of Coutndown timer
@@ -487,6 +487,7 @@ function getVBatt() {
     local voltage = 0
     
     // throw out first measurement. Experimentally first measurement is >5% low
+    // Even with 10uF cap near SD card VCC
     vBatt.read() 
     // read count times and save min, max, and average
     while (i){
