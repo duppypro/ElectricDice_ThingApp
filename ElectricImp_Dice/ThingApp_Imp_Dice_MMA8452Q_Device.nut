@@ -3,21 +3,21 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-04-04a"
+const versionString = "MMA8452Q Dice v00.01.2013-04-12a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 360.0 // seconds with no activity before calling server.sleepfor
-const sleepforDuration = 3500.0 // seconds to stay in deep sleep (wakeup is a reboot)
+const sleepforTimeout = 42//360.0 // seconds with no activity before calling server.sleepfor
+const sleepforDuration = 360//3500.0 // seconds to stay in deep sleep (wakeup is a reboot)
 
-drdyCountdown <- 50 // log full xyz for this many counts
+drdyCountdown <- 12.5 * 60 * 2 // log full xyz for this many sample counts 
 drdyCount <- 0 // current count of Coutndown timer
-lastFaceValue <- "x"
+lastFaceValue <- "boot"
 lastAccelData <- [0, 0, 0]
-const accelChangeThresh = 50 // change in accel per sample to count as movement.  Units of milliGs
+const accelChangeThresh = 500 // change in accel per sample to count as movement.  Units of milliGs
 pollMMA8452QBusy <- false // guard against interrupt handler collisions FIXME: Is this necessary?  Debugging why I get no EA_BIT set error sometimes
 
 ///////////////////////////////////////////////
@@ -112,7 +112,7 @@ function error(string, level) {
 function checkActivity() {
 // checkActivity re-schedules itself every sleepforTimeout
 // FIXME: checkActivity should be more generic
-    log("checkActivity() every " + sleepforTimeout + " secs.", 120)
+    log("checkActivity() every " + sleepforTimeout + " secs.", 10)
     // let the agent know we are still alive
     agent.send("dieEvent", { "keepAlive": true, "vBatt": getVBatt() })
     log("V = " + hardware.voltage(), 100)
@@ -321,7 +321,7 @@ function roll(dieValue) {
         "roll": dieValue
         }
 
-    // Agent will send this to http://interfacearts.webscript.io/electricdice appending "?value=S10100000004,6" (example)
+    // Agent will send this to http://interfacearts.webscript.io/electricdice appending "?dieID=S10100000004&roll=6" (example)
     log(impeeID + " rolls a " + dieValue, 120)
     agent.send("dieEvent", tableDieEvent)
 }
@@ -341,7 +341,7 @@ function getFaceValueFromAccelData(xyz) {
     local faceValue = "s"
     local snapAngle = ""
 
-//<=-0.86    <=-.59    <=-0.25	<=0.26	<=.60	<=.87	<= 1.1
+//<=-0.86    <=-.59    <=-0.25    <=0.26	<=.60	<=.87	<= 1.1
 //-1.00 	-0.707	x	    0	    x	    0.707	1
     foreach(val in xyz) {
         if (val <= -850) {
@@ -433,6 +433,7 @@ function pollMMA8452Q() {
                 if (isDiffAccelData(lastAccelData, xyz)) {
                     wasActive = true
                     imp.setpowersave(false) //wake up for low latency
+                    log("powersave FALSE", 150)
                     drdyCount = drdyCountdown // FIXME: these 3 lines are same as in SRC_FF_MT_BIT handler
                     log(format("x=%9.2f, y=%9.2f, z=%9.2f SRC_DRDY_BIT", xyz[0], xyz[1], xyz[2]), 200)
                 }
@@ -445,6 +446,7 @@ function pollMMA8452Q() {
                 }
                 if (drdyCount == 0) {
                     imp.setpowersave(true) // go to low power because we have not moved for drdyCountdown samples
+                    log("powersave TRUE", 150)
                     // stop listening to SRC_DRDY_BIT
 //                    MMA8452QSetActive(0)
 //                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 0))
@@ -456,6 +458,7 @@ function pollMMA8452Q() {
                 if (readBit(reg, EA_BIT) == 0x1) {
                     wasActive = true
                     imp.setpowersave(false) //wake up for low latency
+                    log("powersave FALSE", 150)
                     drdyCount = drdyCountdown // start logging SRC_DRDY_BIT
 //                    MMA8452QSetActive(0)
 //                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))  // listen for SRC_DRDY_BIT interrupts
