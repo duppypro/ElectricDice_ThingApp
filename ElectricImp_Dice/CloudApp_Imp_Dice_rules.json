@@ -1,0 +1,43 @@
+{
+  // Version: 2013-04-21a
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "public" : {
+      ".read": true,
+      ".write": true
+    },
+    "read-only": {
+      ".read": true,
+      ".write": false
+    },
+    "stream": {
+      "$uuid": {
+        ".read": "root.child('UUIDauth/' + $uuid + '/stream/read').val() == true",
+        ".write": "(root.child('UUIDauth/' + $uuid + '/stream/write').val() == true) && newData.exists()"  // Check newData.exists() so that only admin can remove
+      }
+    },
+    "readme": {
+      "$uuid": {
+        ".read": "root.child('UUIDauth/' + $uuid + '/readme/read').val() == true",
+        ".write": "(root.child('UUIDauth' + $uuid + '/readme/write').val() == true) && newData.exists()"  // Check newData.exists() so that only admin can remove
+      }
+    },
+    "UUIDauth": {
+      // Only admin can read and write this table
+      // Example:
+      //  "{uuid}": {
+      //    "stream": {          // if you know the UUID you can read and write under the root/stream/uuid path
+      //      "read": true,
+      //      "write": true,
+      //    },
+      //    "readme": {          // if you know the UUID you can read under the root/readme/uuid path but only admin can write
+      //      "public": false,   // TODO: if public.val() anyone can read the friendly readme JSON
+      //      "read": true,
+      //      "write": false
+      //    }
+      //  }
+      //  
+    }
+  }
+}

@@ -3,7 +3,7 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-04-12a"
+const versionString = "MMA8452Q Dice v00.01.2013-04-21a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
@@ -114,7 +114,7 @@ function checkActivity() {
 // FIXME: checkActivity should be more generic
     log("checkActivity() every " + sleepforTimeout + " secs.", 10)
     // let the agent know we are still alive
-    agent.send("dieEvent", { "keepAlive": true, "vBatt": getVBatt() })
+    agent.send("dieEvent", { "keepAlive": true, "vBatt": getVBatt(), "micros": hardware.micros() })
     log("V = " + hardware.voltage(), 100)
     if (wasActive) {
         wasActive = false
@@ -318,7 +318,8 @@ function initMMA8452Q() {
 function roll(dieValue) {
     local tableDieEvent = {
         "impeeID": impeeID,
-        "roll": dieValue
+        "roll": dieValue,
+        "micros": hardware.micros()
         }
 
     // Agent will send this to http://interfacearts.webscript.io/electricdice appending "?dieID=S10100000004&roll=6" (example)
