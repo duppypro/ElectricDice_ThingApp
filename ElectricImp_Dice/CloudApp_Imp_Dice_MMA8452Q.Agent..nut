@@ -1,14 +1,14 @@
-/* Electric Dice using MMA8452Q accelerometer */
-/* CloudApp Electric Imp Agent Squirrel code */
+// Electric Dice using MMA8452Q accelerometer */
+// CloudApp Electric Imp Agent Squirrel code */
 
 /////////////////////////////////////////////////
 // global constants and variables
 
 // generic
-const versionString = "MMA8452Q Dice v00.01.2013-04-21a"
+const versionString = "MMA8452Q Dice v00.01.2013-04-24a"
 const logIndent   = "-AGENT:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "-AGENT:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
-logVerbosity <- 200 // higer numbers show more log messages
+logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 
 // dice specific
@@ -52,17 +52,16 @@ function error(string, level) {
 // firebase specific
 http.onrequest(function(req,res) {
     if (req.path == "") {
-        req.query[".priority"] <- clock()
-        log("posting: " + http.jsonencode(req.query), 150)
-        postRes <- 
+// can't use priority until proper UTC is used        req.query[".priority"] <- clock()
+        log("posting: " + http.jsonencode(req.query), 100)
+        local postRes = 
             http.post(
                 firebaseURLRoot + firebaseUUID + ".json",
                 {},
                 http.jsonencode(req.query)
-            ).sendsync()
-        log("post response: " + postRes.body, 200)
+            ).sendasync(onHttpPostComplete)
 /*
-        readRes <-
+        local readRes =
             http.get(
                 firebaseURLRoot + firebaseUUID + firebaseURLParamsString
             ).sendsync().body
@@ -89,7 +88,13 @@ device.on("dieEvent", function(tableDieEvent) {
         delete tableDieEvent.impeeID
     }
     log("received dieEvent " + http.jsonencode(tableDieEvent), 100)
-    http.get(urlElectricDice + "?" + http.urlencode(tableDieEvent)).sendasync(onHttpGetComplete)
+//    http.get(urlElectricDice + "?" + http.urlencode(tableDieEvent)).sendasync(onHttpGetComplete)
+    local postRes = 
+        http.post(
+            firebaseURLRoot + firebaseUUID + ".json",
+            {},
+            http.jsonencode(tableDieEvent)
+        ).sendasync(onHttpPostComplete)
 })
 
 
@@ -100,17 +105,25 @@ log("Imp Agent URL: " + http.agenturl(), 0)
 impAgentURLRoot <- http.agenturl()
 impAgentURLRoot = impAgentURLRoot.slice(0, impAgentURLRoot.find("/", "https://".len()) + 1)
 firebaseUUID <- firebaseUUIDPrefix + http.agenturl().slice(impAgentURLRoot.len())
+log("firebaseURLRoot: " + firebaseURLRoot, 0)
 log("firebaseUUID: " + firebaseUUID, 0)
 firebaseURLParamsString <- ".json?" + http.urlencode(firebaseURLParamsTable)
 log("firebaseURLParamsString: " + firebaseURLParamsString, 200)
 
+function onHttpPostComplete(m) // FIXME:
+{
+    log("post response: " + m.body, 50)
+}
+
 function onHttpGetComplete(m) // FIXME: not used unless I use .sendasync() ???
 {
-  log("status was " + m.statuscode, 150)
+  log("status was " + m.statuscode, 250)
   if (m.statuscode == 200) { // "OK"
-    log("Proudly using " + m.headers.server, 150)
+    log("Proudly using " + m.headers.server, 250)
   }
 }
  
 // No more code to execute so we'll wait for messages from Device code.
-// End of code.
+// End code.
+// Electric Dice using MMA8452Q accelerometer */
+// CloudApp Electric Imp Agent Squirrel code */

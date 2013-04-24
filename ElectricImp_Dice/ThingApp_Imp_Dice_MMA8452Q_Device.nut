@@ -1,17 +1,17 @@
-/* Electric Dice using MMA8452Q accelerometer */
-/* ThingApp Imp Device Squirrel code */
+// Electric Dice using MMA8452Q accelerometer */
+// ThingApp Imp Device Squirrel code */
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-04-21a"
+const versionString = "MMA8452Q Dice v00.01.2013-04-24a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
 wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 42//360.0 // seconds with no activity before calling server.sleepfor
-const sleepforDuration = 360//3500.0 // seconds to stay in deep sleep (wakeup is a reboot)
+const sleepforTimeout = 2700//360.0 // seconds with no activity before calling server.sleepfor
+const sleepforDuration = 3500.0 // seconds to stay in deep sleep (wakeup is a reboot)
 
 drdyCountdown <- 12.5 * 60 * 2 // log full xyz for this many sample counts 
 drdyCount <- 0 // current count of Coutndown timer
@@ -109,12 +109,26 @@ function error(string, level) {
         server.error(indent + string)
 }
 
+function timestamp() {
+    return hardware.micros() / 1000.0  // return milliseconds since boot
+    // FIXME: should return milliseconds since Unix epoch
+}
+
 function checkActivity() {
 // checkActivity re-schedules itself every sleepforTimeout
 // FIXME: checkActivity should be more generic
     log("checkActivity() every " + sleepforTimeout + " secs.", 10)
     // let the agent know we are still alive
-    agent.send("dieEvent", { "keepAlive": true, "vBatt": getVBatt(), "micros": hardware.micros() })
+    t <- timestamp()
+    agent.send(
+        "dieEvent",
+        {
+            "keepAlive": true,
+            "vBatt": getVBatt(),
+            "t": t,
+// can't use priority until proper UTC is used            ".priority": t
+        }
+    )
     log("V = " + hardware.voltage(), 100)
     if (wasActive) {
         wasActive = false
@@ -316,10 +330,12 @@ function initMMA8452Q() {
 // now die specific functions
 
 function roll(dieValue) {
+    local t = timestamp() // FIXME: timestamp should come exactly when sample was captured
     local tableDieEvent = {
         "impeeID": impeeID,
         "roll": dieValue,
-        "micros": hardware.micros()
+        "t": t,
+// can't use priority until proper UTC is used        ".priority": t
         }
 
     // Agent will send this to http://interfacearts.webscript.io/electricdice appending "?dieID=S10100000004&roll=6" (example)
@@ -434,7 +450,7 @@ function pollMMA8452Q() {
                 if (isDiffAccelData(lastAccelData, xyz)) {
                     wasActive = true
                     imp.setpowersave(false) //wake up for low latency
-                    log("powersave FALSE", 150)
+                    log("powersave FALSE", 100)
                     drdyCount = drdyCountdown // FIXME: these 3 lines are same as in SRC_FF_MT_BIT handler
                     log(format("x=%9.2f, y=%9.2f, z=%9.2f SRC_DRDY_BIT", xyz[0], xyz[1], xyz[2]), 200)
                 }
@@ -447,7 +463,7 @@ function pollMMA8452Q() {
                 }
                 if (drdyCount == 0) {
                     imp.setpowersave(true) // go to low power because we have not moved for drdyCountdown samples
-                    log("powersave TRUE", 150)
+                    log("powersave TRUE", 100)
                     // stop listening to SRC_DRDY_BIT
 //                    MMA8452QSetActive(0)
 //                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 0))
@@ -459,7 +475,7 @@ function pollMMA8452Q() {
                 if (readBit(reg, EA_BIT) == 0x1) {
                     wasActive = true
                     imp.setpowersave(false) //wake up for low latency
-                    log("powersave FALSE", 150)
+                    log("powersave FALSE", 100)
                     drdyCount = drdyCountdown // start logging SRC_DRDY_BIT
 //                    MMA8452QSetActive(0)
 //                    writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))  // listen for SRC_DRDY_BIT interrupts
@@ -533,3 +549,5 @@ pollMMA8452Q()  // call first time to get a roll value on boot.
 
 // No more code to execute so we'll sleep until an interrupt from MMA8452Q.
 // End of code.
+// Electric Dice using MMA8452Q accelerometer */
+// ThingApp Imp Device Squirrel code */
