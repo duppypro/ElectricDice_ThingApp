@@ -5,7 +5,7 @@
 // global constants and variables
 
 // generic
-const versionString = "MMA8452Q Dice v00.01.2013-04-24a"
+const versionString = "MMA8452Q Dice v00.01.2013-04-28a"
 const logIndent   = "-AGENT:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "-AGENT:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
@@ -60,15 +60,12 @@ http.onrequest(function(req,res) {
                 {},
                 http.jsonencode(req.query)
             ).sendasync(onHttpPostComplete)
-/*
         local readRes =
             http.get(
                 firebaseURLRoot + firebaseUUID + firebaseURLParamsString
             ).sendsync().body
         log("read response: " + readRes, 200)
         res.send(200, readRes)
-*/
-        res.send(200, postRes.body)
     }
 });
 
@@ -112,7 +109,7 @@ log("firebaseURLParamsString: " + firebaseURLParamsString, 200)
 
 function onHttpPostComplete(m) // FIXME:
 {
-    log("post response: " + m.body, 50)
+  log("post response: " + m.body, 150)
 }
 
 function onHttpGetComplete(m) // FIXME: not used unless I use .sendasync() ???
