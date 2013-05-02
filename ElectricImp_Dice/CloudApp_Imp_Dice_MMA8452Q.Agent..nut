@@ -5,7 +5,7 @@
 // global constants and variables
 
 // generic
-const versionString = "MMA8452Q Dice v00.01.2013-04-28a"
+const versionString = "MMA8452Q Dice v00.01.2013-05-01a"
 const logIndent   = "-AGENT:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "-AGENT:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
@@ -24,8 +24,8 @@ mapImpeeID_DieID <- {
 const urlElectricDice = "http://interfacearts.webscript.io/electricdice"
 
 // which firebase to use
-const betaURL = "-beta" // or "" for public website
-firebaseURLRoot <- "https://electricdice" + betaURL + ".firebaseio.com/stream/"
+firebaseURLRoot <- "https://electricdice-beta.firebaseio.com/stream/"
+//firebaseURLRoot <- "https://electricdice.firebaseio.com/stream/"
 const firebaseUUIDPrefix = "imp-v0-" // add prefix so that imp UUIDs do not collide with other Thing UUIDs
 firebaseURLParamsTable <- {}
 firebaseURLParamsTable.print <- "pretty"
@@ -50,24 +50,21 @@ function error(string, level) {
 }
 
 // firebase specific
+httpResponse <- {}
 http.onrequest(function(req,res) {
-    if (req.path == "") {
-// can't use priority until proper UTC is used        req.query[".priority"] <- clock()
-        log("posting: " + http.jsonencode(req.query), 100)
-        local postRes = 
-            http.post(
-                firebaseURLRoot + firebaseUUID + ".json",
-                {},
-                http.jsonencode(req.query)
-            ).sendasync(onHttpPostComplete)
-        local readRes =
-            http.get(
-                firebaseURLRoot + firebaseUUID + firebaseURLParamsString
-            ).sendsync().body
-        log("read response: " + readRes, 200)
-        res.send(200, readRes)
-    }
-});
+    log("posting: " + http.jsonencode(req.query), 100)
+    http.post(
+        firebaseURLRoot + firebaseUUID + ".json",
+        {},
+        http.jsonencode(req.query)
+    ).sendasync(onHttpPostComplete)
+    log("getting: " + firebaseURLRoot + firebaseUUID + firebaseURLParamsString, 100)
+    httpResponse = res
+    http.get(
+        firebaseURLRoot + firebaseUUID + firebaseURLParamsString,
+        {}
+    ).sendasync(onHttpGetComplete)
+})
 
 // dice specific
 
@@ -85,13 +82,12 @@ device.on("dieEvent", function(tableDieEvent) {
         delete tableDieEvent.impeeID
     }
     log("received dieEvent " + http.jsonencode(tableDieEvent), 100)
-//    http.get(urlElectricDice + "?" + http.urlencode(tableDieEvent)).sendasync(onHttpGetComplete)
-    local postRes = 
-        http.post(
-            firebaseURLRoot + firebaseUUID + ".json",
-            {},
-            http.jsonencode(tableDieEvent)
-        ).sendasync(onHttpPostComplete)
+//old webscript.io call    http.get(urlElectricDice + "?" + http.urlencode(tableDieEvent)).sendasync(onHttpGetComplete)
+    http.post(
+        firebaseURLRoot + firebaseUUID + ".json",
+        {},
+        http.jsonencode(tableDieEvent)
+    ).sendasync(onHttpPostComplete)
 })
 
 
@@ -105,19 +101,17 @@ firebaseUUID <- firebaseUUIDPrefix + http.agenturl().slice(impAgentURLRoot.len()
 log("firebaseURLRoot: " + firebaseURLRoot, 0)
 log("firebaseUUID: " + firebaseUUID, 0)
 firebaseURLParamsString <- ".json?" + http.urlencode(firebaseURLParamsTable)
-log("firebaseURLParamsString: " + firebaseURLParamsString, 200)
+log("firebaseURLParamsString: " + firebaseURLParamsString, 100)
 
 function onHttpPostComplete(m) // FIXME:
 {
-  log("post response: " + m.body, 150)
+    log("POST response: " + m.body, 150)
 }
 
 function onHttpGetComplete(m) // FIXME: not used unless I use .sendasync() ???
 {
-  log("status was " + m.statuscode, 250)
-  if (m.statuscode == 200) { // "OK"
-    log("Proudly using " + m.headers.server, 250)
-  }
+    log("GET response: " + m.body, 100)
+    httpResponse.send(200, m.body)
 }
  
 // No more code to execute so we'll wait for messages from Device code.

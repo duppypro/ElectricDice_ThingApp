@@ -3,13 +3,13 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-04-28b"
+const versionString = "MMA8452Q Dice v00.01.2013-05-02a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
-wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
+//DEPRECATED: wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
 const sleepforTimeout = 117 // seconds with no activity before logging and dec idleCount
 const sleepforDuration = 1800 // seconds to stay in deep sleep (wakeup is a reboot)
 const idleCountdown = 30 // how many sleepforTimeout periods of inactivity before server.sleepfor
@@ -109,14 +109,14 @@ function error(string, level) {
 }
 
 function timestamp() {
-    return hardware.micros() / 1000.0  // return milliseconds since boot
+    return format("%016u", hardware.micros())  // return microseconds since boot
     // FIXME: should return milliseconds since Unix epoch
 }
 
 function checkActivity() {
 // checkActivity re-schedules itself every sleepforTimeout
 // FIXME: checkActivity should be more generic
-    log("checkActivity() every " + sleepforTimeout + " secs.", 10)
+    log("checkActivity() every " + sleepforTimeout + " secs.", 200)
     // let the agent know we are still alive
     t <- timestamp()
     agent.send(
@@ -128,9 +128,9 @@ function checkActivity() {
 // can't use priority until proper UTC is used            ".priority": t
         }
     )
-    if (wasActive) {
-        wasActive = false
-        idleCount = idleCountdown
+    if (imp.getpowersave() == false) {
+        imp.setpowersave(true)
+        idleCount = idleCountdown // restart idle count down
     } else {
         if (idleCount == 0) {
             idleCount = idleCountdown
@@ -273,7 +273,7 @@ function initMMA8452Q() {
     // setup CTRL_REG1
     reg = readReg(CTRL_REG1)
     reg = writeBitField(reg, ASLP_RATE_BIT, 2, ASLP_RATE_1p56HZ)
-    reg = writeBitField(reg, DR_BIT, 3, DR_1p56HZ) //DR_12p5HZ)
+    reg = writeBitField(reg, DR_BIT, 3, DR_12p5HZ)
     // leave LNOISE_BIT as default off to save power
     // Set Fast read mode to read 8bits per xyz instead of 12bits
     reg = writeBit(reg, F_READ_BIT, 1)
@@ -441,17 +441,13 @@ function pollMMA8452Q() {
                 if (faceValue != lastFaceValue) {
                     roll(faceValue)
                     lastFaceValue = faceValue
-                    wasActive = true
+                    imp.setpowersave(false) // go to low latency mode when facevalue changes
                 }
             }
             if (readBit(reg, SRC_FF_MT_BIT) == 0x1) {
                 log("Interrupt SRC_FF_MT_BIT", 50)
                 reg = readReg(FF_MT_SRC) // this clears SRC_FF_MT_BIT
-                if (readBit(reg, EA_BIT) == 0x1) {
-                    wasActive = true
-                } else {
-                    error(format("FF_MT_SRC == 0x%02x  why no EA bit?", reg), 100)
-                }
+                imp.setpowersave(false) // go to low latency mode because we detected motion
             }
             if (readBit(reg, SRC_ASLP_BIT) == 0x1) {
                 reg = readReg(SYSMOD) // this clears SRC_ASLP_BIT
@@ -494,7 +490,7 @@ function getVBatt() {
 ////////////////////////////////////////////////////////
 // first code starts here
 
-imp.setpowersave(true)
+imp.setpowersave(false) // start in low latency mode.  Treat boot as an activity
 // Register with the server
 imp.configure("MMA8452Q Dice using Agent messages", [], [])
 // no in and out []s anymore, using Agent messages

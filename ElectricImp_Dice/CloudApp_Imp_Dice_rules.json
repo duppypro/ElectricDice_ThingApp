@@ -1,5 +1,5 @@
 {
-  // Version: 2013-04-21a
+  // Version: 2013-04-29a
   "rules": {
     ".read": false,
     ".write": false,
@@ -13,17 +13,17 @@
     },
     "stream": {
       "$uuid": {
-        ".read": "root.child('UUIDauth/' + $uuid + '/stream/read').val() == true",
-        ".write": "(root.child('UUIDauth/' + $uuid + '/stream/write').val() == true) && newData.exists()"  // Check newData.exists() so that only admin can remove
+        ".read": "root.child('permissions/' + $uuid + '/stream/read').val() == true",
+        ".write": "(root.child('permissions/' + $uuid + '/stream/write').val() == true) && newData.exists()"  // Check newData.exists() so that only admin can remove
       }
     },
     "readme": {
       "$uuid": {
-        ".read": "root.child('UUIDauth/' + $uuid + '/readme/read').val() == true",
-        ".write": "(root.child('UUIDauth' + $uuid + '/readme/write').val() == true) && newData.exists()"  // Check newData.exists() so that only admin can remove
+        ".read": "root.child('permissions/' + $uuid + '/readme/read').val() == true",
+        ".write": "(root.child('permissions/' + $uuid + '/readme/write').val() == true) && newData.exists()"  // Check newData.exists() so that only admin can remove
       }
     },
-    "UUIDauth": {
+    "permissions": {
       // Only admin can read and write this table
       // Example:
       //  "{uuid}": {
