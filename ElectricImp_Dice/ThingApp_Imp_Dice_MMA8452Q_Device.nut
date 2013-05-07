@@ -3,16 +3,17 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-05-02a"
+const versionString = "MMA8452Q Dice v00.01.2013-05-05a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
-logVerbosity <- 100 // higer numbers show more log messages
+logVerbosity <- 100 // higher numbers show more log messages
 errorVerbosity <- 1000 // higher number shows more error messages
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
+offsetMilliseconds <- 0 // set later to milliseconds % 1000 when time() rolls over
 //DEPRECATED: wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 117 // seconds with no activity before logging and dec idleCount
-const sleepforDuration = 1800 // seconds to stay in deep sleep (wakeup is a reboot)
-const idleCountdown = 30 // how many sleepforTimeout periods of inactivity before server.sleepfor
+const sleepforTimeout = 60 // seconds with no activity before logging and dec idleCount
+const sleepforDuration = 3300 // seconds to stay in deep sleep (wakeup is a reboot)
+const idleCountdown = 6 // how many sleepforTimeout periods of inactivity before server.sleepfor
 idleCount <- idleCountdown // Current count of idleCountdown timer
 lastFaceValue <- "boot"
 const accelChangeThresh = 500 // change in accel per sample to count as movement.  Units of milliGs
@@ -88,7 +89,7 @@ const CTRL_REG5        = 0x2E
 i2c <- hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
 vBatt <- hardware.pin5 // now we can use vBatt.read()
 i2cRetryPeriod <- 1.0 // seconds to wait before retrying a failed i2c operation
-fullScale <- FS_4G // what scale to get G readings
+maxG <- FS_4G // what scale to get G readings
 
 ///////////////////////////////////////////////
 //define functions
@@ -109,8 +110,11 @@ function error(string, level) {
 }
 
 function timestamp() {
-    return format("%016u", hardware.micros())  // return microseconds since boot
-    // FIXME: should return milliseconds since Unix epoch
+    local t, m
+    t = time()
+    m = hardware.millis()
+    return format("%010.3f", (t * 1.0) + ((m % 1000) - offsetMilliseconds) / 1000.0)
+        // return milliseconds since Unix epoch 
 }
 
 function checkActivity() {
@@ -213,7 +217,8 @@ function readAccelData() {
     
     rawData = readSequentialRegs(OUT_X_MSB, 3)  // Read the three raw data registers into data array
     foreach (i, val in rawData) {
-        accelData[i] = math.floor(1000.0 * ((val < 128 ? val : val - 256) / ((64 >> fullScale) + 0.0))) // FIXME: (depends on FS_scale selected)
+        accelData[i] = math.floor(1000.0 * ((val < 128 ? val : val - 256) / ((64 >> maxG) + 0.0)))
+            // HACK: in above calc maxG just happens to be (log2(full_scale) - 1)  see: const for FS_2G, FS_4G, FS_8G 
         //convert to signed integer milliGs
     }
     return accelData
@@ -268,7 +273,7 @@ function initMMA8452Q() {
 
     // Set up the full scale range to 2, 4, or 8g.
     // FIXME: assumes HPF_OUT_BIT in this same register always == 0
-    writeReg(XYZ_DATA_CFG, fullScale)
+    writeReg(XYZ_DATA_CFG, maxG)
     
     // setup CTRL_REG1
     reg = readReg(CTRL_REG1)
@@ -472,16 +477,13 @@ function getVBatt() {
     local i = tableVBatt.count
     local voltage = 0
     
-    // throw out first measurement. Experimentally first measurement is >5% low
-    // Even with 10uF cap near SD card VCC
     vBatt.read() 
     // read count times and save min, max, and average
-    while (i){
+    while (i--){
         voltage = (2 * vBatt.read() / 65535.0) * hardware.voltage()
         if (voltage < tableVBatt.min) { tableVBatt.min = voltage }
         if (voltage > tableVBatt.max) { tableVBatt.max = voltage }
         tableVBatt.avg = tableVBatt.avg + voltage
-        i = i - 1
     }
     tableVBatt.avg = tableVBatt.avg / tableVBatt.count
     return tableVBatt
@@ -490,16 +492,29 @@ function getVBatt() {
 ////////////////////////////////////////////////////////
 // first code starts here
 
-imp.setpowersave(false) // start in low latency mode.  Treat boot as an activity
+imp.setpowersave(true) // start in low power mode.
+    // Optimized for case where wakeup was caused by periodic timer, not user activity
+
 // Register with the server
-imp.configure("MMA8452Q Dice using Agent messages", [], [])
+//imp.configure("MMA8452Q 1D6", [], []) // One 6-sided Die
 // no in and out []s anymore, using Agent messages
 
 // Send status to know we are alive
 log("BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress(), 0)
 
-// roll every time we boot just for some debug activity
-roll("boot" + (math.rand() % 6 + 1)) // 1 - 6 for a six sided die
+// roll every time we boot just for some debug status
+roll("boot0")
+
+// BUGBUG: below needed until newer firmware!?  See http://forums.electricimp.com/discussion/comment/4875#Comment_2714
+imp.enableblinkup(true)
+
+local lastUTCSeconds = time()
+while(lastUTCSeconds == time()) {
+}
+offsetMilliseconds = hardware.millis() % 1000
+log("offsetMilliseconds = " + offsetMilliseconds, 30)
+log(format("lastUTCSeconds = %013u", lastUTCSeconds), 40)
+//log(format("lastUTCSeconds = %013u", lastUTCSeconds * 1000.0), 40)
 
 log("powersave = " + imp.getpowersave(), 100)
 // Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.

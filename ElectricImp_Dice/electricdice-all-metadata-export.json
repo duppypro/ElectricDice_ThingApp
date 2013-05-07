@@ -1,0 +1,198 @@
+{
+  "all-tags-with-refcount": {
+    "example": 2,
+    "electricdice": 6,
+    "analytic": 1,
+    "senstream": 0
+  },
+  "all-thingstreams": {
+    "imp-v0-010001-y8iJsytFqFt3": {
+      },
+    "example-imp-v0-020001-uWIhNy5FPLWE": {
+      "all-sessions": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/example-imp-v0-020001-uWIhNy5FPLWE/all-sessions",
+      "readme": {
+        "part9999": "TODO: use push generated names instead of 'partnnnn'.",
+        "part0001": "\"Long form description of this data stream here.\\r\\nThis thingstream outputs facevalues '1' through '6'."
+      },
+      "num-sessions": 1,
+      "tag": {
+        "example": true,
+        "electricdice": true,
+        "analytic": true
+      },
+      "num-data": "number of data points in completed sessions only.  May or may not be up to date with session in progress.",
+      "time-units-per-millisecond": 1000,
+      "data-type": {
+        "readme": {
+          "text": "key-name 'enum' is special. Data for 'enum' has no key-name.  It is the value of the time key.\r\nIf value is not one of the '-enum' sub keys then display it as '-other'."
+        },
+        "key-name": {
+          "-enum": {
+            "5": true,
+            "6": true,
+            "1": true,
+            "3": true,
+            "-other": true,
+            "4": true,
+            "2": true
+          }
+        }
+      },
+      "all-data-by-session": {
+        "-REF-": {
+          "startAt": null,
+          "readme": "The '-REF-' reserved keyname means to replace this node with contents (or startAt.endAt.limit subset) of the node at '-URL-'",
+          "limit": null,
+          "-URL-": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/example-imp-v0-010001-uWIhNy5FPLWE/all-data-by-session",
+          "endAt": null
+        }
+      },
+      "input-thingstream": {
+        "example-imp-v0-010001-uWIhNy5FPLWE": true
+      },
+      "friendly-name": "Example data structure.\r\nCreated manually."
+    },
+    "imp-v0-020001-y8iJsytFqFt3": {
+      "all-sessions": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/imp-v0-020001-y8iJsytFqFt3/all-sessions",
+      "tag": {
+        "electricdice": true
+      },
+      "all-data-by-session": {
+        "-REF-": {
+          "startAt": null,
+          "readme": "The '-REF-' reserved keyname means to replace this node with contents (or startAt.endAt.limit subset) of the node at '-URL-'",
+          "limit": null,
+          "-URL-": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/example-imp-v0-010001-uWIhNy5FPLWE/all-data-by-session",
+          "endAt": null
+        }
+      }
+    },
+    "imp-v0-020001-uWIhNy5FPLWE": {
+      "all-sessions": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/imp-v0-020001-uWIhNy5FPLWE/all-sessions",
+      "tag": {
+        "electricdice": true
+      },
+      "all-data-by-session": {
+        "-REF-": {
+          "startAt": null,
+          "readme": "The '-REF-' reserved keyname means to replace this node with contents (or startAt.endAt.limit subset) of the node at '-URL-'",
+          "limit": null,
+          "-URL-": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/example-imp-v0-010001-uWIhNy5FPLWE/all-data-by-session",
+          "endAt": null
+        }
+      }
+    },
+    "example-imp-v0-010001-uWIhNy5FPLWE": {
+      "all-sessions": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/example-imp-v0-010001-uWIhNy5FPLWE/all-sessions",
+      "readme": {
+        "part0002": "May span multiple parts if neccessary.",
+        "part9999": "TODO: use push generated names instead of 'partnnnn'.",
+        "part0001": "Long form description of this data stream here.\r\n"
+      },
+      "num-sessions": 1,
+      "tag": {
+        "example": true,
+        "electricdice": true
+      },
+      "num-data": "number of data points in completed sessions only.  May or may not be up to date with session in progress.",
+      "time-units-per-millisecond": 1000,
+      "data-type": {
+        "readme": {
+          "text": "key-name 'scalar' is special. Data for 'scalar' has no key-name.  It is the value of the time key."
+        },
+        "key-name": {
+          "x": {
+            "alternate-key-name": 1,
+            "min": -8,
+            "max": 8,
+            "units": "Adafruit Unified Sensor Driver - standardised SI units - 001 - acceleration: values are in meter per second per second (m/s^2)",
+            "accuracy": 0.0625,
+            "enum": false
+          },
+          "z": {
+            "alternate-key-name": 2,
+            "min": -8,
+            "max": 8,
+            "units": "Adafruit Unified Sensor Driver - standardised SI units - 001 - acceleration: values are in meter per second per second (m/s^2)",
+            "accuracy": 0.0625,
+            "enum": false
+          },
+          "y": {
+            "alternate-key-name": 3,
+            "min": -8,
+            "max": 8,
+            "units": "Adafruit Unified Sensor Driver - standardised SI units - 001 - acceleration: values are in meter per second per second (m/s^2)",
+            "accuracy": 0.0625,
+            "enum": false
+          }
+        }
+      },
+      "all-data-by-session": {
+        "-REF-": {
+          "startAt": null,
+          "readme": "The '-REF-' reserved keyname means to replace this node with contents (or startAt.endAt.limit subset) of the node at '-URL-'",
+          "limit": null,
+          "-URL-": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/example-imp-v0-010001-uWIhNy5FPLWE/all-data-by-session",
+          "endAt": null
+        }
+      },
+      "input-thingstream": false,
+      "friendly-name": "Example data structure.\r\nCreated manually."
+    },
+    "imp-v0-010001-uWIhNy5FPLWE": {
+      "all-sessions": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/imp-v0-010001-uWIhNy5FPLWE/all-sessions",
+      "tag": {
+        "electricdice": true
+      },
+      "all-data-by-session": {
+        "-REF-": {
+          "startAt": null,
+          "readme": "The '-REF-' reserved keyname means to replace this node with contents (or startAt.endAt.limit subset) of the node at '-URL-'",
+          "limit": null,
+          "-URL-": "https://electricdice-all-thingstreams.firebaseio.com/all-thingstreams/example-imp-v0-010001-uWIhNy5FPLWE/all-data-by-session",
+          "endAt": null
+        }
+      }
+    }
+  },
+  "permissions": {
+    "imp-v0-uWIhNy5FPLWE": {
+      "readme": {
+        "write": false,
+        "read": true
+      },
+      "stream": {
+        "write": true,
+        "read": true
+      }
+    },
+    "imp-v0-y8iJsytFqFt3": {
+      "readme": {
+        "write": false,
+        "read": true
+      },
+      "stream": {
+        "write": true,
+        "read": true
+      }
+    }
+  },
+  "all-thingstreams-by-tag": {
+    "example": {
+      "example-imp-v0-020001-uWIhNy5FPLWE": true,
+      "example-imp-v0-010001-uWIhNy5FPLWE": true
+    },
+    "electricdice": {
+      "imp-v0-010001-y8iJsytFqFt3": true,
+      "example-imp-v0-020001-uWIhNy5FPLWE": true,
+      "imp-v0-020001-y8iJsytFqFt3": true,
+      "imp-v0-020001-uWIhNy5FPLWE": true,
+      "example-imp-v0-010001-uWIhNy5FPLWE": true,
+      "imp-v0-010001-uWIhNy5FPLWE": true
+    },
+    "analytic": {
+      "example-imp-v0-020001-uWIhNy5FPLWE": true
+    },
+    "senstream": false
+  }
+}
