@@ -3,7 +3,7 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-05-05a"
+const versionString = "MMA8452Q Dice v00.01.2013-08-06a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higher numbers show more log messages
@@ -11,7 +11,7 @@ errorVerbosity <- 1000 // higher number shows more error messages
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
 offsetMilliseconds <- 0 // set later to milliseconds % 1000 when time() rolls over
 //DEPRECATED: wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
-const sleepforTimeout = 60 // seconds with no activity before logging and dec idleCount
+const sleepforTimeout = 122 // seconds with no activity before logging and dec idleCount
 const sleepforDuration = 3300 // seconds to stay in deep sleep (wakeup is a reboot)
 const idleCountdown = 6 // how many sleepforTimeout periods of inactivity before server.sleepfor
 idleCount <- idleCountdown // Current count of idleCountdown timer

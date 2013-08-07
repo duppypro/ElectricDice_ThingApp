@@ -5,7 +5,7 @@
 // global constants and variables
 
 // generic
-const versionString = "MMA8452Q Dice v00.01.2013-05-01a"
+const versionString = "MMA8452Q Dice v00.01.2013-08-06a"
 const logIndent   = "-AGENT:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "-AGENT:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higer numbers show more log messages
