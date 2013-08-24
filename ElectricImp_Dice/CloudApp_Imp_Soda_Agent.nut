@@ -15,9 +15,9 @@ const fbUuidPrefix = "imp-v0-" // add prefix so that imp UUIDs do not collide wi
 fbUuid <- fbUuidPrefix + http.agenturl().slice(impAgentURLRoot.len()) + "/"
 // FIXME: Move UUID assignment to cloud
 fbParamsTable <- {}
-fbParamsTable.print <- "pretty" // "silent" or "pretty"
+fbParamsTable.print <- "silent" // "pretty"
 fbParamsTable.auth <- fbAuth
-fbParamsString <- "/.json?" + http.urlencode(fbParamsTable)
+fbParamsString <- ".json?" + http.urlencode(fbParamsTable)
 tsRoot <- fbRoot + fbUuid // pre-calc for speed?
 // generic configuration and init
 logVerbosity <- 100 // higer numbers show more log messages
@@ -107,7 +107,7 @@ log("Imp Agent URL : " + http.agenturl(), 0)
 log("Agent SW version : " + imp.getsoftwareversion(), 10)
 log("Thingstream Root : " + tsRoot, 100)
 log("fbParamsString: " + fbParamsString, 100)
-const versionString = "MMA8452Q Dice v00.01.2013-08-23a"
+const versionString = "Remeber The Soda v00.01.2013-08-22a"
 log("Ready for events.  Version : " + versionString, 0)
 
 // No more code to execute so we'll wait for messages from Device

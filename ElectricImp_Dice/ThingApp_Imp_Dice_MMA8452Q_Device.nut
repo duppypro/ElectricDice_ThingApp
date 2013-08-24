@@ -3,7 +3,7 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-08-06a"
+const versionString = "MMA8452Q Dice v00.01.2013-08-23a"
 const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
 const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
 logVerbosity <- 100 // higher numbers show more log messages
@@ -112,8 +112,10 @@ function error(string, level) {
 function timestamp() {
     local t, m
     t = time()
+    // log("timestamp :" + t, 50)
     m = hardware.millis()
-    return format("%010.3f", (t * 1.0) + ((m % 1000) - offsetMilliseconds) / 1000.0)
+    // log("    m :" + m, 50)
+    return format("%010u%03u", t, (m - offsetMilliseconds) % 1000)
         // return milliseconds since Unix epoch 
 }
 
@@ -122,13 +124,13 @@ function checkActivity() {
 // FIXME: checkActivity should be more generic
     log("checkActivity() every " + sleepforTimeout + " secs.", 200)
     // let the agent know we are still alive
-    t <- timestamp()
+    // t <- timestamp()
     agent.send(
-        "dieEvent",
+        "event",
         {
             "keepAlive": idleCount,
             "vBatt": getVBatt(),
-            "t": t,
+            "t": timestamp(),
 // can't use priority until proper UTC is used            ".priority": t
         }
     )
@@ -340,17 +342,21 @@ function initMMA8452Q() {
 // now die specific functions
 
 function roll(dieValue) {
-    local t = timestamp() // FIXME: timestamp should come exactly when sample was captured
-    local tableDieEvent = {
-        "impeeID": impeeID,
+    local tableDieEvent
+
+    // FIXME: timestamp should come exactly when sample was captured
+    tableDieEvent = {
+        // "impeeID": impeeID,
         "roll": dieValue,
-        "t": t,
+        "t": timestamp(),
 // can't use priority until proper UTC is used        ".priority": t
         }
+    // tableDieEvent.t = timestamp()
+    // log("table t " + tableDieEvent.t, 50)
 
     // Agent will send this to http://interfacearts.webscript.io/electricdice appending "?dieID=S10100000004&roll=6" (example)
-//    log(impeeID + " rolls a " + dieValue, 120)
-    agent.send("dieEvent", tableDieEvent)
+// log(impeeID + " rolls a " + dieValue + " at " + tableDieEvent.t, 20)
+    agent.send("event", tableDieEvent)
 }
 
 function getFaceValueFromAccelData(xyz) {
@@ -486,7 +492,7 @@ function getVBatt() {
         tableVBatt.avg = tableVBatt.avg + voltage
     }
     tableVBatt.avg = tableVBatt.avg / tableVBatt.count
-    return tableVBatt
+    return tableVBatt.avg
 }
 
 ////////////////////////////////////////////////////////
@@ -501,18 +507,21 @@ imp.setpowersave(true) // start in low power mode.
 
 // Send status to know we are alive
 log("BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress(), 0)
+log("imp software version : " + imp.getsoftwareversion(), 10)
 
 // roll every time we boot just for some debug status
 roll("boot0")
 
 // BUGBUG: below needed until newer firmware!?  See http://forums.electricimp.com/discussion/comment/4875#Comment_2714
-imp.enableblinkup(true)
+// imp.enableblinkup(true)
 
 local lastUTCSeconds = time()
 while(lastUTCSeconds == time()) {
 }
 offsetMilliseconds = hardware.millis() % 1000
 log("offsetMilliseconds = " + offsetMilliseconds, 30)
+log(timestamp(),40)
+
 log(format("lastUTCSeconds = %013u", lastUTCSeconds), 40)
 //log(format("lastUTCSeconds = %013u", lastUTCSeconds * 1000.0), 40)
 
@@ -522,7 +531,8 @@ hardware.pin1.configure(DIGITAL_IN_WAKEUP, pollMMA8452Q)
 // Configure pin5 as ADC to read Vbatt/2.0
 vBatt.configure(ANALOG_IN)
 // set the I2C clock speed. We can do 10 kHz, 50 kHz, 100 kHz, or 400 kHz
-i2c.configure(CLOCK_SPEED_400_KHZ)
+// i2c.configure(CLOCK_SPEED_400_KHZ)
+i2c.configure(CLOCK_SPEED_100_KHZ) // try to fix i2c read errors.  May need 4.7K external pull-up to go to 400_KHZ
 initMMA8452Q()  // sets up code to run on interrupts from MMA8452Q
 
 checkActivity() // kickstart checkActivity, this re-schedules itself every sleepforTimeout seconds
@@ -531,6 +541,6 @@ checkActivity() // kickstart checkActivity, this re-schedules itself every sleep
 pollMMA8452Q()  // call first time to get a roll value on boot.
 
 // No more code to execute so we'll sleep until an interrupt from MMA8452Q.
-// End of code.
-// Electric Dice using MMA8452Q accelerometer */
-// ThingApp Imp Device Squirrel code */
+// Electric Dice using MMA8452Q accelerometer
+// ThingApp Imp Device Squirrel code
+// end of code

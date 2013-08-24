@@ -4,6 +4,10 @@
 		"selected_items":
 		[
 			[
+				"tabl",
+				"tableDieEvent"
+			],
+			[
 				"offsetMil",
 				"offsetMilliseconds"
 			],
@@ -28,35 +32,35 @@
 	"buffers":
 	[
 		{
+			"file": "ThingApp_Imp_Soda_Device.nut",
+			"settings":
+			{
+				"buffer_size": 6203,
+				"line_ending": "Unix"
+			}
+		},
+		{
 			"file": "ThingApp_Imp_Dice_MMA8452Q_Device.nut",
 			"settings":
 			{
-				"buffer_size": 21134,
+				"buffer_size": 21703,
 				"line_ending": "Unix"
 			}
 		},
 		{
-			"file": "CloudApp_Imp_Dice_MMA8452Q.Agent..nut",
+			"file": "CloudApp_Imp_Soda_Agent.nut",
 			"settings":
 			{
-				"buffer_size": 4101,
+				"buffer_size": 6305,
 				"line_ending": "Windows"
 			}
 		},
 		{
-			"file": "CloudApp_Imp_Dice_rules.json",
+			"file": "CloudApp_Imp_Dice_MMA8452Q_Agent.nut",
 			"settings":
 			{
-				"buffer_size": 1443,
+				"buffer_size": 6371,
 				"line_ending": "Windows"
-			}
-		},
-		{
-			"file": "electricdice-all-metadata-export.json",
-			"settings":
-			{
-				"buffer_size": 7362,
-				"line_ending": "Unix"
 			}
 		}
 	],
@@ -88,6 +92,9 @@
 	},
 	"file_history":
 	[
+		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/electricdice-all-metadata-export.json",
+		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/CloudApp_Imp_Dice_rules.json",
+		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/CloudApp_Imp_Dice_MMA8452Q.Agent..nut",
 		"/C/Users/duppy/Dropbox/Apps/site44/www.interfacearts.com/fireview/index.html",
 		"/C/Users/duppy/Dropbox/Apps/site44/www.interfacearts.com/index.html",
 		"/C/Users/duppy/Dropbox/Apps/site44/fireview.interfacearts.com/index (Duppy Proctor's conflicted copy 2013-05-03).html",
@@ -119,6 +126,26 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"firebaseURLParamsString",
+			"firebaseURLParamsTable",
+			"readSequentialRegs",
+			"uuid",
+			"checkActivity",
+			"initMMA8452Q",
+			"fakeMillis",
+			"agent.send",
+			"getVBatt",
+			"complete",
+			"timestamp",
+			"send",
+			"timestamp",
+			"firebaseUUID",
+			"timestamp",
+			"offsetMilliseconds",
+			"agent",
+			"date",
+			"millis",
+			"ubi",
 			"offsetMilliseconds",
 			"estimate",
 			"estimatedUTCMilliseconds",
@@ -148,23 +175,23 @@
 	"groups":
 	[
 		{
-			"selected": 0,
+			"selected": 1,
 			"sheets":
 			[
 				{
 					"buffer": 0,
-					"file": "ThingApp_Imp_Dice_MMA8452Q_Device.nut",
+					"file": "ThingApp_Imp_Soda_Device.nut",
 					"settings":
 					{
-						"buffer_size": 21134,
+						"buffer_size": 6203,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								753,
-								753
+								2635,
+								2635
 							]
 						],
 						"settings":
@@ -180,25 +207,25 @@
 							"wrap_width": 80
 						},
 						"translation.x": 0.0,
-						"translation.y": 9349.0,
+						"translation.y": 713.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
 				},
 				{
 					"buffer": 1,
-					"file": "CloudApp_Imp_Dice_MMA8452Q.Agent..nut",
+					"file": "ThingApp_Imp_Dice_MMA8452Q_Device.nut",
 					"settings":
 					{
-						"buffer_size": 4101,
+						"buffer_size": 21703,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								0,
-								0
+								13301,
+								13301
 							]
 						],
 						"settings":
@@ -208,69 +235,69 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 8458.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
-				},
+				}
+			]
+		},
+		{
+			"selected": 1,
+			"sheets":
+			[
 				{
 					"buffer": 2,
-					"file": "CloudApp_Imp_Dice_rules.json",
+					"file": "CloudApp_Imp_Soda_Agent.nut",
 					"settings":
 					{
-						"buffer_size": 1443,
+						"buffer_size": 6305,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								0,
-								0
+								3459,
+								3459
 							]
 						],
 						"settings":
 						{
-							"syntax": "Packages/JavaScript/JSON.tmLanguage",
-							"tab_size": 2,
+							"syntax": "Packages/Squirrel/Squirrel.tmLanguage",
+							"tab_size": 4,
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 1301.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
 				},
 				{
 					"buffer": 3,
-					"file": "electricdice-all-metadata-export.json",
+					"file": "CloudApp_Imp_Dice_MMA8452Q_Agent.nut",
 					"settings":
 					{
-						"buffer_size": 7362,
+						"buffer_size": 6371,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								5216,
-								5231
+								728,
+								728
 							]
 						],
 						"settings":
 						{
-							"rulers":
-							[
-								80
-							],
-							"syntax": "Packages/JavaScript/JSON.tmLanguage",
-							"tab_size": 2,
-							"translate_tabs_to_spaces": true,
-							"word_wrap": true,
-							"wrap_width": 80
+							"syntax": "Packages/Squirrel/Squirrel.tmLanguage",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 1951.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
@@ -295,11 +322,18 @@
 				0,
 				1,
 				1
+			],
+			[
+				1,
+				0,
+				2,
+				1
 			]
 		],
 		"cols":
 		[
 			0.0,
+			0.5,
 			1.0
 		],
 		"rows":
@@ -342,6 +376,6 @@
 	"show_open_files": true,
 	"show_tabs": true,
 	"side_bar_visible": false,
-	"side_bar_width": 150.0,
+	"side_bar_width": 297.0,
 	"status_bar_visible": true
 }
