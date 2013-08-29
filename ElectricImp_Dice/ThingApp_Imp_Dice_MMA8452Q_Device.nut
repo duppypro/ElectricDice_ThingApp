@@ -3,11 +3,7 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-08-23a"
-const logIndent   = "Device:_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
-const errorIndent = "Device:#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
-logVerbosity <- 100 // higher numbers show more log messages
-errorVerbosity <- 1000 // higher number shows more error messages
+const versionString = "MMA8452Q Dice v00.01.2013-08-26a"
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
 offsetMilliseconds <- 0 // set later to milliseconds % 1000 when time() rolls over
 //DEPRECATED: wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
@@ -86,35 +82,21 @@ const CTRL_REG4        = 0x2D
 const CTRL_REG5        = 0x2E
 
 // helper variables for MMA8452Q. These are not const because they may have reason to change dynamically.
-i2c <- hardware.i2c89 // now can use i2c.read... instead of hardware.i2c89.read...
-vBatt <- hardware.pin5 // now we can use vBatt.read()
 i2cRetryPeriod <- 1.0 // seconds to wait before retrying a failed i2c operation
 maxG <- FS_4G // what scale to get G readings
+i2c <- hardware.i2c89 // now can use i2c.read()
+vBatt <- hardware.pin5 // now we can use vBatt.read()
 
 ///////////////////////////////////////////////
 //define functions
 
 // start with fairly generic functions
-function log(string, level) {
-    local indent = logIndent.slice(0, level / 10 + 7)
-    if (level <= logVerbosity)
-        server.log(indent + string)
-    if (level == 0)
-        server.show(string)
-}
-
-function error(string, level) {
-    local indent = errorIndent.slice(0, level / 10 + 7)
-    if (level <= errorVerbosity)
-        server.error(indent + string)
-}
-
 function timestamp() {
     local t, m
     t = time()
-    // log("timestamp :" + t, 50)
+    // server.log("timestamp :" + t)
     m = hardware.millis()
-    // log("    m :" + m, 50)
+    // server.log("    m :" + m)
     return format("%010u%03u", t, (m - offsetMilliseconds) % 1000)
         // return milliseconds since Unix epoch 
 }
@@ -122,16 +104,14 @@ function timestamp() {
 function checkActivity() {
 // checkActivity re-schedules itself every sleepforTimeout
 // FIXME: checkActivity should be more generic
-    log("checkActivity() every " + sleepforTimeout + " secs.", 200)
+    server.log("checkActivity() every " + sleepforTimeout + " secs.")
     // let the agent know we are still alive
-    // t <- timestamp()
     agent.send(
         "event",
         {
             "keepAlive": idleCount,
             "vBatt": getVBatt(),
             "t": timestamp(),
-// can't use priority until proper UTC is used            ".priority": t
         }
     )
     if (imp.getpowersave() == false) {
@@ -140,7 +120,7 @@ function checkActivity() {
     } else {
         if (idleCount == 0) {
             idleCount = idleCountdown
-            log("No activity for " + sleepforTimeout * idleCountdown + " to " + sleepforTimeout * (idleCountdown + 1) + " secs.\r\nGoing to deepsleep for " + (sleepforDuration / 60.0) + " minutes.", 10)
+            server.log("No activity for " + sleepforTimeout * idleCountdown + " to " + sleepforTimeout * (idleCountdown + 1) + " secs.\r\nGoing to deepsleep for " + (sleepforDuration / 60.0) + " minutes.")
             // Disable data ready interrupts.  Motion interrupts is left enabled in order to wake from sleep
             // FIXME: this function should not know about MMA8452Q specifics
             MMA8452QSetActive(0) // Can't write MMA8452Q until not active
@@ -175,7 +155,7 @@ function writeBit(val, bitPosition, newVal) { return writeBitField(val, bitPosit
 // Read a single byte from addressToRead and return it as a byte.  (The '[0]' causes a byte to return)
 function readReg(addressToRead) {
     return readSequentialRegs(addressToRead, 1)[0]
-}
+}   
 
 // Writes a single byte (dataToWrite) into addressToWrite.  Returns error code from i2c.write
 // Continue retry until success.  Caller does not need to check error code
@@ -183,11 +163,11 @@ function writeReg(addressToWrite, dataToWrite) {
     local err = null
     while (err == null) {
         err = i2c.write(MMA8452Q_ADDR << 1, format("%c%c", addressToWrite, dataToWrite))
-        log(format("i2c.write addr=0x%02x data=0x%02x", addressToWrite, dataToWrite), 150)
+        // server.log(format("i2c.write addr=0x%02x data=0x%02x", addressToWrite, dataToWrite))
         if (err == null) {
-            error("i2c.write of value " + format("0x%02x", dataToWrite) + " to " + format("0x%02x", addressToWrite) + " failed.", 10)
+            server.error("i2c.write of value " + format("0x%02x", dataToWrite) + " to " + format("0x%02x", addressToWrite) + " failed.")
             imp.sleep(i2cRetryPeriod)
-            error("retry i2c.write", 100)
+            server.error("retry i2c.write")
         }
     }
     return err
@@ -201,9 +181,9 @@ function readSequentialRegs(addressToRead, numBytes) {
     while (data == null) {
         data = i2c.read(MMA8452Q_ADDR << 1, format("%c", addressToRead), numBytes)
         if (data == null) {
-            error("i2c.read from " + format("0x%02x", addressToRead) + " of " + numBytes + " byte" + ((numBytes > 1) ? "s" : "") + " failed.", 10)
+            server.error("i2c.read from " + format("0x%02x", addressToRead) + " of " + numBytes + " byte" + ((numBytes > 1) ? "s" : "") + " failed.")
             imp.sleep(i2cRetryPeriod)
-            error("retry i2c.read", 100)
+            server.error("retry i2c.read")
         }
     }
     return data
@@ -233,10 +213,10 @@ function MMA8452QReset() {
     do {
         reg = readReg(WHO_AM_I)  // Read WHO_AM_I register
         if (reg == I_AM_MMA8452Q) {
-            log("Found MMA8452Q.  Sending RST command...", 200)
+            server.log("Found MMA8452Q.  Sending RST command...")
             break
         } else {
-            error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg), 10)
+            server.error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg))
             imp.sleep(i2cRetryPeriod)
         }
     } while (true)
@@ -247,10 +227,10 @@ function MMA8452QReset() {
     do {
         reg = readReg(WHO_AM_I)  // Read WHO_AM_I register
         if (reg == I_AM_MMA8452Q) {
-            log("MMA8452Q is online!", 150)
+            server.log("MMA8452Q is online!")
             break
         } else {
-            error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg), 10)
+            server.error("Could not connect to MMA8452Q: WHO_AM_I reg == " + format("0x%02x", reg))
             imp.sleep(i2cRetryPeriod)
         }
     } while (true)
@@ -319,7 +299,7 @@ function initMMA8452Q() {
     reg = writeBitField(reg, XYZEFE_BIT, 3, XYZEFE_ALL)
     // set all FF_MT_CFG bit fields in one i2c write
     writeReg(FF_MT_CFG, reg)
-    log(format("FF_MT_CFG == 0x%02x", readReg(FF_MT_CFG)), 150)
+    server.log(format("FF_MT_CFG == 0x%02x", readReg(FF_MT_CFG)))
     
     // setup Motion threshold to n*0.063.  (16 * 0.063 == 1G)
     writeReg(FF_MT_THS, 60) // FIXME: this is a shortcut and assumes DBCNTM_BIT is 0
@@ -334,7 +314,7 @@ function initMMA8452Q() {
     writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_FF_MT_BIT, 1))
     // Enable interrupts on every new data
     writeReg(CTRL_REG4, writeBit(readReg(CTRL_REG4), INT_EN_DRDY_BIT, 1))
-    log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)), 150)
+    server.log(format("CTRL_REG4 == 0x%02x", readReg(CTRL_REG4)))
 
     MMA8452QSetActive(1)  // Set to active to start reading
 } // initMMA8452Q
@@ -352,10 +332,10 @@ function roll(dieValue) {
 // can't use priority until proper UTC is used        ".priority": t
         }
     // tableDieEvent.t = timestamp()
-    // log("table t " + tableDieEvent.t, 50)
+    // server.log("table t " + tableDieEvent.t)
 
     // Agent will send this to http://interfacearts.webscript.io/electricdice appending "?dieID=S10100000004&roll=6" (example)
-// log(impeeID + " rolls a " + dieValue + " at " + tableDieEvent.t, 20)
+// server.log(impeeID + " rolls a " + dieValue + " at " + tableDieEvent.t)
     agent.send("event", tableDieEvent)
 }
 
@@ -436,7 +416,7 @@ function pollMMA8452Q() {
     local faceValue = lastFaceValue    
 
     while (pollMMA8452QBusy) {
-        log("pollMMA8452QBusy collision", 50)
+        server.log("pollMMA8452QBusy collision")
         // wait herer unitl other instance of int handler is done
     }
     pollMMA8452QBusy = true // mark as busy
@@ -444,10 +424,10 @@ function pollMMA8452Q() {
 //FIXME:  do we need to check status for data ready in all xyz?//log(format("STATUS == 0x%02x", readReg(STATUS)), 80)
         reg = readReg(INT_SOURCE)
         while (reg != 0x00) {
-//            log(format("INT_SOURCE == 0x%02x", reg), 200)
+//            server.log(format("INT_SOURCE == 0x%02x", reg))
             if (readBit(reg, SRC_DRDY_BIT) == 0x1) {
                 xyz = readAccelData() // this clears the SRC_DRDY_BIT
-                log(format("%4d %4d %4d", xyz[0], xyz[1], xyz[2]), 200)
+                // server.log(format("%4d %4d %4d", xyz[0], xyz[1], xyz[2]))
                 faceValue = getFaceValueFromAccelData(xyz)
                 if (faceValue != lastFaceValue) {
                     roll(faceValue)
@@ -456,18 +436,18 @@ function pollMMA8452Q() {
                 }
             }
             if (readBit(reg, SRC_FF_MT_BIT) == 0x1) {
-                log("Interrupt SRC_FF_MT_BIT", 50)
+                server.log("Interrupt SRC_FF_MT_BIT")
                 reg = readReg(FF_MT_SRC) // this clears SRC_FF_MT_BIT
                 imp.setpowersave(false) // go to low latency mode because we detected motion
             }
             if (readBit(reg, SRC_ASLP_BIT) == 0x1) {
                 reg = readReg(SYSMOD) // this clears SRC_ASLP_BIT
-//                log(format("Entering SYSMOD 0x%02x", reg), 100)
+//                server.log(format("Entering SYSMOD 0x%02x", reg))
             }
             reg = readReg(INT_SOURCE)
         } // while (reg != 0x00)
     } else {
-//        log("INT2 LOW", 200)
+//        server.log("INT2 LOW")
     }
     pollMMA8452QBusy = false // clear so other inst of int handler can run
 } // pollMMA8452Q
@@ -506,8 +486,8 @@ imp.setpowersave(true) // start in low power mode.
 // no in and out []s anymore, using Agent messages
 
 // Send status to know we are alive
-log("BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress(), 0)
-log("imp software version : " + imp.getsoftwareversion(), 10)
+server.log("BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress())
+server.log("imp software version : " + imp.getsoftwareversion())
 
 // roll every time we boot just for some debug status
 roll("boot0")
@@ -515,17 +495,12 @@ roll("boot0")
 // BUGBUG: below needed until newer firmware!?  See http://forums.electricimp.com/discussion/comment/4875#Comment_2714
 // imp.enableblinkup(true)
 
-local lastUTCSeconds = time()
+lastUTCSeconds <- time()
 while(lastUTCSeconds == time()) {
-}
+} // wait for seonds to roll over
 offsetMilliseconds = hardware.millis() % 1000
-log("offsetMilliseconds = " + offsetMilliseconds, 30)
-log(timestamp(),40)
-
-log(format("lastUTCSeconds = %013u", lastUTCSeconds), 40)
-//log(format("lastUTCSeconds = %013u", lastUTCSeconds * 1000.0), 40)
-
-log("powersave = " + imp.getpowersave(), 100)
+server.log("timestamp = " + timestamp())
+server.log("powersave = " + imp.getpowersave())
 // Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.
 hardware.pin1.configure(DIGITAL_IN_WAKEUP, pollMMA8452Q)
 // Configure pin5 as ADC to read Vbatt/2.0
@@ -542,5 +517,5 @@ pollMMA8452Q()  // call first time to get a roll value on boot.
 
 // No more code to execute so we'll sleep until an interrupt from MMA8452Q.
 // Electric Dice using MMA8452Q accelerometer
-// ThingApp Imp Device Squirrel code
+// Electric Imp Device Squirrel (.nut) code
 // end of code

@@ -1,46 +1,20 @@
-// Generic Imp to Firebase Thingstream Agent
-// CloudApp Electric Imp Agent Squirrel code
+// Generic Elextric Imp Agent to Thingstream on Firebase
 
-/////////////////////////////////////////////////
-// global constants and variables
-
-///////////////////////////////////////////////
 // Firebase configuration and init 
 fbRoot <- "https://electricdice-beta.firebaseio.com/stream/"
+///****************** SECRET: ***************************************/ fbAuth <- "PasteSecretFirebaseAuthKeyHere"
 /****************** SECRET: ***************************************/ fbAuth <- "emRthqxr7UVV6Jw4SeEI9G65GA0CUXpfVN3eBoGO"
 /****************** SECRET: ***************************************/
-impAgentURLRoot <- http.agenturl()
-impAgentURLRoot = impAgentURLRoot.slice(0, impAgentURLRoot.find("/", "https://".len()) + 1)
-const fbUuidPrefix = "imp-v0-" // add prefix so that imp UUIDs do not collide with other Thingstream UUIDs
-fbUuid <- fbUuidPrefix + http.agenturl().slice(impAgentURLRoot.len()) + "/"
+const fbUuidPrefix = "imp-v0-" // add unique prefix so that imp UUIDs do not collide with other Thingstream UUIDs
+// CONSTRAINT: Assumes first 30 chars of http.agenturl() are root and remainder are UUID
+fbUuid <- fbUuidPrefix + http.agenturl().slice(30) + "/"
 // FIXME: Move UUID assignment to cloud
 fbParamsTable <- {}
-fbParamsTable.print <- "pretty" // "silent" or "pretty"
+fbParamsTable.print <- "silent" // "silent" or "pretty"
 fbParamsTable.auth <- fbAuth
 fbParamsString <- "/.json?" + http.urlencode(fbParamsTable)
-tsRoot <- fbRoot + fbUuid // pre-calc for speed?
-// generic configuration and init
-logVerbosity <- 100 // higer numbers show more log messages
-errorVerbosity <- 1000 // higher number shows more error messages
-const logIndent   = "_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
+tsRoot <- fbRoot + fbUuid // pre-calc Thingstream root for speed?
 
-///////////////////////////////////////////////
-// generic functions
-function log(string, level) {
-    if (level <= logVerbosity) {
-        indent <- logIndent.slice(0, level / 10)
-        server.log(indent + string)
-    }
-}
-
-function error(string, level) {
-    if (level <= errorVerbosity) {
-        indent <- logIndent.slice(0, level / 10)
-        server.error(indent + string)
-    }
-}
-
-///////////////////////////////////////////////
 // firebase specific functions
 function getNow() {
     d <- date()
@@ -50,67 +24,69 @@ function getNow() {
 
 function streamThing(timeKey, dataTable) {
     // FIXME: this does not check for pre-existence of a duplicate timeKey.  So for now, 'By Design' this is last writer wins.
+    // server.log(tsRoot + timeKey + fbParamsString)
+    // server.log(http.jsonencode(dataTable))
     http.request(
         "PUT",
-        fbRoot + fbUuid + timeKey + fbParamsString,
+        tsRoot + timeKey + fbParamsString,
         {},
         http.jsonencode(dataTable)
     ).sendasync(onHttpRequestComplete)
 }
 
-///////////////////////////////////////////////
 // event handlers
-
 // trigger events from REST for debugging
 http.onrequest(function(req,res) {
     timeKey <- getNow()
     tableEvent <- req.query
-    log("Received from REST: " + http.jsonencode(tableEvent), 100)
+    server.log("Received from REST: " + http.jsonencode(tableEvent)
+        + "\r\n at " + timeKey
+    )
     streamThing(timeKey, tableEvent)
     res.send(200,
         "Requested .set of \r\n"
         + http.jsonencode(tableEvent)
-        + "\r\n to " + fbRoot + fbUuid + timeKey + "/.json")
+        + "\r\n to " + tsRoot + timeKey + fbParamsString
+    )
 })
 
 function onHttpRequestComplete(m) {
     if (m.statuscode == 200) {
-        log("Request Complete : " + m.body, 110)
+        server.log("Request Complete : " + m.body)
+    } else if (m.statuscode == 204) {
+        // server.log("Request Complete : " + m.body)
     } else if (m.statuscode == 201) {
-        error("AUTH error " + m.statuscode + "\r\n" + m.body, 10)
+        server.error("AUTH error " + m.statuscode + "\r\n" + m.body)
     } else {
-        error("REQUEST error " + m.statuscode + "\r\n" + m.body, 10)
+        server.error("REQUEST error " + m.statuscode + "\r\n" + m.body)
     }
 }
 
 device.onconnect(function() {
-    log("Connect", 10)
+    server.log("Connect")
 })
 
 device.ondisconnect(function() {
-    log("Disconnect", 10)
+    server.log("Disconnect")
     // FIXME: send info to Dice server when disconnect 
 })
 
 device.on("event", function(tableEvent) {
-    log("received dieEvent " + http.jsonencode(tableEvent), 100)
+    server.log("received dieEvent " + http.jsonencode(tableEvent))
     local timeKey = tableEvent.t // extract timestamp and make it the path
     delete tableEvent.t
     // append to firebase Thingstream
     streamThing(timeKey, tableEvent)
 })
 
-
-////////////////////////////////////////////////////////
-// first Agent code starts here
-log("Imp Agent URL : " + http.agenturl(), 0)
-log("Agent SW version : " + imp.getsoftwareversion(), 10)
-log("Thingstream Root : " + tsRoot, 100)
-log("fbParamsString: " + fbParamsString, 100)
-const versionString = "MMA8452Q Dice v00.01.2013-08-23a"
-log("Ready for events.  Version : " + versionString, 0)
+// first Agent code starts here (event handlers already running)
+server.log("Imp Agent URL      :   " + http.agenturl())
+server.log("Agent SW version   :   " + imp.getsoftwareversion())
+server.log("Thingstream Root   :   " + tsRoot)
+server.log("fbParamsString     :   " + fbParamsString)
+server.log("Version            :   MMA8452Q Dice v00.01.2013-08-26a")
+server.log("Waiting for events...")
 
 // No more code to execute so we'll wait for messages from Device
-// Remember The Soda
-// CloudApp Electric Imp Agent Squirrel (.nut) code
+// Electric Imp Agent Squirrel (.nut) code
 // end of code

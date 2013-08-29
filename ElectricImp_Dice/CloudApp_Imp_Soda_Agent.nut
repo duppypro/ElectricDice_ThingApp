@@ -26,14 +26,14 @@ const logIndent   = "_________>_________>_________>_________>_________>_________
 
 ///////////////////////////////////////////////
 // generic functions
-function log(string, level) {
+function server.log(string, level) {
     if (level <= logVerbosity) {
         indent <- logIndent.slice(0, level / 10)
         server.log(indent + string)
     }
 }
 
-function error(string, level) {
+function server.error(string, level) {
     if (level <= errorVerbosity) {
         indent <- logIndent.slice(0, level / 10)
         server.error(indent + string)
@@ -65,7 +65,7 @@ function streamThing(timeKey, dataTable) {
 http.onrequest(function(req,res) {
     timeKey <- getNow()
     tableEvent <- req.query
-    log("Received from REST: " + http.jsonencode(tableEvent), 100)
+    server.log("Received from REST: " + http.jsonencode(tableEvent))
     streamThing(timeKey, tableEvent)
     res.send(200,
         "Requested .set of \r\n"
@@ -75,25 +75,25 @@ http.onrequest(function(req,res) {
 
 function onHttpRequestComplete(m) {
     if (m.statuscode == 200) {
-        log("Request Complete : " + m.body, 110)
+        server.log("Request Complete : " + m.body)
     } else if (m.statuscode == 201) {
-        error("AUTH error " + m.statuscode + "\r\n" + m.body, 10)
+        server.error("AUTH error " + m.statuscode + "\r\n" + m.body)
     } else {
-        error("REQUEST error " + m.statuscode + "\r\n" + m.body, 10)
+        server.error("REQUEST error " + m.statuscode + "\r\n" + m.body)
     }
 }
 
 device.onconnect(function() {
-    log("Connect", 10)
+    server.log("Connect")
 })
 
 device.ondisconnect(function() {
-    log("Disconnect", 10)
+    server.log("Disconnect")
     // FIXME: send info to Dice server when disconnect 
 })
 
 device.on("event", function(tableEvent) {
-    log("received dieEvent " + http.jsonencode(tableEvent), 100)
+    server.log("received dieEvent " + http.jsonencode(tableEvent))
     local timeKey = tableEvent.t // extract timestamp and make it the path
     delete tableEvent.t
     // append to firebase Thingstream
@@ -103,12 +103,12 @@ device.on("event", function(tableEvent) {
 
 ////////////////////////////////////////////////////////
 // first Agent code starts here
-log("Imp Agent URL : " + http.agenturl(), 0)
-log("Agent SW version : " + imp.getsoftwareversion(), 10)
-log("Thingstream Root : " + tsRoot, 100)
-log("fbParamsString: " + fbParamsString, 100)
+server.log("Imp Agent URL : " + http.agenturl())
+server.log("Agent SW version : " + imp.getsoftwareversion())
+server.log("Thingstream Root : " + tsRoot)
+server.log("fbParamsString: " + fbParamsString)
 const versionString = "Remeber The Soda v00.01.2013-08-22a"
-log("Ready for events.  Version : " + versionString, 0)
+server.log("Ready for events.  Version : " + versionString)
 
 // No more code to execute so we'll wait for messages from Device
 // Remember The Soda
