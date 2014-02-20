@@ -3,7 +3,7 @@
 
 /////////////////////////////////////////////////
 // global constants and variables
-const versionString = "MMA8452Q Dice v00.01.2013-08-26a"
+const versionString = "MMA8452Q Dice v00.01.2014-02-19a"
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
 offsetMilliseconds <- 0 // set later to milliseconds % 1000 when time() rolls over
 //DEPRECATED: wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
@@ -345,23 +345,41 @@ function getFaceValueFromAccelData(xyz) {
 
 //<=-0.86    <=-.59    <=-0.25    <=0.26    <=.60	<=.87	<= 1.1
 //-1.00 	-0.707	     x	       0	    x	    0.707	1
+    // foreach(val in xyz) {
+    //     if (val <= -875) {
+    //         snapAngle += "a"
+    //     } else if (val <= -550) {
+    //         snapAngle += "b"
+    //     } else if (val <= -150) {
+    //         snapAngle += "x"
+    //     } else if (val <= 150) {
+    //         snapAngle += "0"
+    //     } else if (val <= 550) {
+    //         snapAngle += "x"
+    //     } else if (val <= 875) {
+    //         snapAngle += "c"
+    //     } else {
+    //         snapAngle += "d"
+    //     }
+    // }
     foreach(val in xyz) {
-        if (val <= -875) {
+        if (val <= -9000) {
             snapAngle += "a"
-        } else if (val <= -550) {
+        } else if (val <= -200) {
             snapAngle += "b"
-        } else if (val <= -150) {
+        } else if (val <= -200) {
             snapAngle += "x"
-        } else if (val <= 150) {
+        } else if (val <= 200) {
             snapAngle += "0"
-        } else if (val <= 550) {
+        } else if (val <= 200) {
             snapAngle += "x"
-        } else if (val <= 875) {
+        } else if (val <= 9000) {
             snapAngle += "c"
         } else {
             snapAngle += "d"
         }
     }
+    // server.log(snapAngle)
 // facevalue	x	y	z           x*x + z*z
 //d1	0.000	1.000	0.000           0
 //d2	0.707	0.000	-0.707          1
@@ -387,21 +405,31 @@ function getFaceValueFromAccelData(xyz) {
       
     switch (snapAngle) {
         case "0d0":
+        case "0c0":
             faceValue = "1"
             break
         case "c0b":
+        case "cbb":
+        case "ccb":
             faceValue = "2"
             break
         case "b0b":
+        case "bbb":
+        case "bcb":
             faceValue = "3"
             break
         case "c0c":
+        case "cbc":
+        case "ccc":
             faceValue = "4"
             break
         case "b0c":
+        case "bbc":
+        case "bcc":
             faceValue = "5"
             break
         case "0a0":
+        case "0b0":
             faceValue = "6"
             break
         default:

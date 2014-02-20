@@ -40,14 +40,6 @@
 			}
 		},
 		{
-			"file": "ThingApp_Imp_Dice_MMA8452Q_Device.nut",
-			"settings":
-			{
-				"buffer_size": 20548,
-				"line_ending": "Unix"
-			}
-		},
-		{
 			"file": "CloudApp_Imp_Soda_Agent.nut",
 			"settings":
 			{
@@ -56,10 +48,7 @@
 			}
 		},
 		{
-			"contents": "// Electric Dice using MMA8452Q accelerometer */\n// ThingApp Imp Device Squirrel code */\n\n/////////////////////////////////////////////////\n// global constants and variables\nconst versionString = \"Remember The Soda v00.01.2013-08-22a\"\nimpeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?\noffsetMilliseconds <- 0 // set later to milliseconds % 1000 when time() rolls over\n//DEPRECATED: wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled\nconst sleepforTimeout = 122 // seconds with no activity before logging and dec idleCount\nconst sleepforDuration = 3300 // seconds to stay in deep sleep (wakeup is a reboot)\nconst idleCountdown = 6 // how many sleepforTimeout periods of inactivity before server.sleepfor\nidleCount <- idleCountdown // Current count of idleCountdown timer\n\n// helper variables\n// These are not const because they may have reason to change dynamically.\nvBatt <- hardware.pin5 // now we can use vBatt.read()\n\n///////////////////////////////////////////////\n//define functions\n\n// start with fairly generic functions\nfunction timestamp() {\n    local t, m\n    t = time()\n    m = hardware.millis()\n    return format(\"%010u%03u\", t, (m - offsetMilliseconds) % 1000)\n        // return milliseconds since Unix epoch \n}\n\nfunction checkActivity() {\n// checkActivity re-schedules itself every sleepforTimeout\n// FIXME: checkActivity should be more generic\n    server.log(\"checkActivity() every \" + sleepforTimeout + \" secs.\")\n    // let the agent know we are still alive\n    agent.send(\n        \"event\",\n        {\n            \"keepAlive\": idleCount,\n            \"vBatt\": getVBatt(),\n            \"t\": timestamp(),\n        }\n    )\n    if (imp.getpowersave() == false) {\n        imp.setpowersave(true)\n        idleCount = idleCountdown // restart idle count down\n    } else {\n        if (idleCount == 0) {\n            idleCount = idleCountdown\n            server.log(\"No activity for \" + sleepforTimeout * idleCountdown + \" to \" + sleepforTimeout * (idleCountdown + 1) + \" secs.\\r\\nGoing to deepsleep for \" + (sleepforDuration / 60.0) + \" minutes.\")\n            //\n            // do app specific shutdown stuff here\n            //\n            imp.onidle(function() { server.sleepfor(sleepforDuration) })  // go to deepsleep if no MMA8452Q interrupts for sleepforTimeout\n        } else {\n            idleCount -= 1\n        }\n    }\n    imp.wakeup(sleepforTimeout, checkActivity)\n} // checkActivity\n\n// now functions specific to devices that read i2c registers\n\n// now app specific functions\n\n// now general helper functions common to many apps\n\nfunction getVBatt() {\n    local tableVBatt = {\n        \"min\": 10,\n        \"max\": 0,\n        \"avg\": 0,\n        \"hardware-voltage\": hardware.voltage(),\n        \"count\": 3\n    }\n    local i = tableVBatt.count\n    local voltage = 0\n    \n    vBatt.read() \n    // read count times and save min, max, and average\n    while (i--){\n        voltage = (2 * vBatt.read() / 65535.0) * hardware.voltage()\n        if (voltage < tableVBatt.min) { tableVBatt.min = voltage }\n        if (voltage > tableVBatt.max) { tableVBatt.max = voltage }\n        tableVBatt.avg = tableVBatt.avg + voltage\n    }\n    tableVBatt.avg = tableVBatt.avg / tableVBatt.count\n    return tableVBatt.avg\n}\n\nfunction wakeup() {\n    server.log(\"woke up via pin1\")\n}\n\n////////////////////////////////////////////////////////\n// first code starts here\n\nimp.setpowersave(true) // start in low power mode.\n    // Optimized for case where wakeup was caused by periodic timer, not user activity\n\n// Register with the server\n//imp.configure(\"MMA8452Q 1D6\", [], []) // One 6-sided Die\n// no in and out []s anymore, using Agent messages\n\n// Send status to know we are alive\nlog(\"BOOTING  \" + versionString + \" \" + hardware.getimpeeid() + \"/\" + imp.getmacaddress())\nlog(\"imp software version : \" + imp.getsoftwareversion())\n\n// BUGBUG: below needed until newer firmware!?  See http://forums.electricimp.com/discussion/comment/4875#Comment_2714\n// imp.enableblinkup(true)\n\nlocal lastUTCSeconds = time()\nwhile(lastUTCSeconds == time()) {\n}\noffsetMilliseconds = hardware.millis() % 1000\nlog(\"offsetMilliseconds = \" + offsetMilliseconds)\n\nlog(\"powersave = \" + imp.getpowersave())\n// Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.\nhardware.pin1.configure(DIGITAL_IN_WAKEUP, wakeup)\n// Configure pin5 as ADC to read Vbatt/2.0\nvBatt.configure(ANALOG_IN)\n\ncheckActivity() // kickstart checkActivity, this re-schedules itself every sleepforTimeout seconds\n// FIXME: checkActivity waits from sleepforTimeout to sleepforTimeout*2.  Make this more constant.\n\n\n// No more code to execute so we'll sleep until an interrupt from MMA8452Q.\n// End of code.\n// Electric Dice using MMA8452Q accelerometer */\n// ThingApp Imp Device Squirrel code */",
 			"file": "ThingApp_Imp_Soda_Device.nut",
-			"file_size": 5569,
-			"file_write_time": 1377222700000000,
 			"settings":
 			{
 				"buffer_size": 4811,
@@ -105,6 +94,7 @@
 	},
 	"file_history":
 	[
+		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/Sample_MMA8452Q_Device.nut",
 		"/Users/duppy/Dropbox/TechShop/Cloud Dice/3Dprint/case0bin.jsCAD.js",
 		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/CloudApp_Imp_Dice_MMA8452Q_Agent.nut",
 		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/ThingApp_Imp_Dice_MMA8452Q_Device.nut",
@@ -143,6 +133,9 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"CTRL_REG4",
+			"CTRL_REG1",
+			"CTRL_REG2",
 			"server.log",
 			"fbRoot",
 			"server.log",
@@ -267,39 +260,11 @@
 			]
 		},
 		{
-			"selected": 0,
+			"selected": 1,
 			"sheets":
 			[
 				{
 					"buffer": 1,
-					"file": "ThingApp_Imp_Dice_MMA8452Q_Device.nut",
-					"settings":
-					{
-						"buffer_size": 20548,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								18331,
-								18331
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Squirrel/Squirrel.tmLanguage",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 7695.0,
-						"zoom_level": 1.0
-					},
-					"type": "text"
-				},
-				{
-					"buffer": 2,
 					"file": "CloudApp_Imp_Soda_Agent.nut",
 					"settings":
 					{
@@ -321,13 +286,13 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 15.0,
+						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
 				},
 				{
-					"buffer": 3,
+					"buffer": 2,
 					"file": "ThingApp_Imp_Soda_Device.nut",
 					"settings":
 					{
@@ -361,7 +326,7 @@
 					"type": "text"
 				},
 				{
-					"buffer": 4,
+					"buffer": 3,
 					"settings":
 					{
 						"buffer_size": 2866,

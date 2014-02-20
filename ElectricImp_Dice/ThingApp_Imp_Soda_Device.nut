@@ -4,10 +4,6 @@
 /////////////////////////////////////////////////
 // global constants and variables
 const versionString = "Remember The Soda v00.01.2013-08-22a"
-const logIndent   = "_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>_________>"
-const errorIndent = "#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!#########!" 
-logVerbosity <- 100 // higher numbers show more log messages
-errorVerbosity <- 1000 // higher number shows more error messages
 impeeID <- hardware.getimpeeid() // cache the impeeID FIXME: is this necessary for speed?
 offsetMilliseconds <- 0 // set later to milliseconds % 1000 when time() rolls over
 //DEPRECATED: wasActive <- true // stay alive on boot as if button was pressed or die moved/rolled
@@ -24,20 +20,6 @@ vBatt <- hardware.pin5 // now we can use vBatt.read()
 //define functions
 
 // start with fairly generic functions
-function log(string, level) {
-    local indent = logIndent.slice(0, level / 10)
-    if (level <= logVerbosity)
-        server.log(indent + string)
-    if (level == 0)
-        server.show(string)
-}
-
-function error(string, level) {
-    local indent = errorIndent.slice(0, level / 10)
-    if (level <= errorVerbosity)
-        server.error(indent + string)
-}
-
 function timestamp() {
     local t, m
     t = time()
@@ -49,7 +31,7 @@ function timestamp() {
 function checkActivity() {
 // checkActivity re-schedules itself every sleepforTimeout
 // FIXME: checkActivity should be more generic
-    log("checkActivity() every " + sleepforTimeout + " secs.", 200)
+    server.log("checkActivity() every " + sleepforTimeout + " secs.")
     // let the agent know we are still alive
     agent.send(
         "event",
@@ -65,7 +47,7 @@ function checkActivity() {
     } else {
         if (idleCount == 0) {
             idleCount = idleCountdown
-            log("No activity for " + sleepforTimeout * idleCountdown + " to " + sleepforTimeout * (idleCountdown + 1) + " secs.\r\nGoing to deepsleep for " + (sleepforDuration / 60.0) + " minutes.", 10)
+            server.log("No activity for " + sleepforTimeout * idleCountdown + " to " + sleepforTimeout * (idleCountdown + 1) + " secs.\r\nGoing to deepsleep for " + (sleepforDuration / 60.0) + " minutes.")
             //
             // do app specific shutdown stuff here
             //
@@ -107,7 +89,7 @@ function getVBatt() {
 }
 
 function wakeup() {
-    log("woke up via pin1", 10)
+    server.log("woke up via pin1")
 }
 
 ////////////////////////////////////////////////////////
@@ -121,8 +103,8 @@ imp.setpowersave(true) // start in low power mode.
 // no in and out []s anymore, using Agent messages
 
 // Send status to know we are alive
-log("BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress(), 0)
-log("imp software version : " + imp.getsoftwareversion(), 10)
+log("BOOTING  " + versionString + " " + hardware.getimpeeid() + "/" + imp.getmacaddress())
+log("imp software version : " + imp.getsoftwareversion())
 
 // BUGBUG: below needed until newer firmware!?  See http://forums.electricimp.com/discussion/comment/4875#Comment_2714
 // imp.enableblinkup(true)
@@ -131,9 +113,9 @@ local lastUTCSeconds = time()
 while(lastUTCSeconds == time()) {
 }
 offsetMilliseconds = hardware.millis() % 1000
-log("offsetMilliseconds = " + offsetMilliseconds, 30)
+log("offsetMilliseconds = " + offsetMilliseconds)
 
-log("powersave = " + imp.getpowersave(), 100)
+log("powersave = " + imp.getpowersave())
 // Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.
 hardware.pin1.configure(DIGITAL_IN_WAKEUP, wakeup)
 // Configure pin5 as ADC to read Vbatt/2.0
