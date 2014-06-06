@@ -40,29 +40,11 @@
 			}
 		},
 		{
-			"file": "CloudApp_Imp_Soda_Agent.nut",
+			"file": "ThingApp_Imp_Dice_MMA8452Q_Device.nut",
 			"settings":
 			{
-				"buffer_size": 4121,
-				"line_ending": "Windows"
-			}
-		},
-		{
-			"file": "ThingApp_Imp_Soda_Device.nut",
-			"settings":
-			{
-				"buffer_size": 4811,
+				"buffer_size": 21286,
 				"line_ending": "Unix"
-			}
-		},
-		{
-			"contents": "Searching 4 files for \"[^.]log\\(\" (regex)\n\n/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/CloudApp_Imp_Soda_Agent.nut:\n  103  \n  104  ////////////////////////////////////////////////////////\n  105: // first Agent code starts here\n  106: log(\"Imp Agent URL : \" + http.agenturl())\n  107: log(\"Agent SW version : \" + imp.getsoftwareversion())\n  108: log(\"Thingstream Root : \" + tsRoot)\n  109: log(\"fbParamsString: \" + fbParamsString)\n  110: const versionString = \"Remeber The Soda v00.01.2013-08-22a\"\n  111: log(\"Ready for events.  Version : \" + versionString)\n  112  \n  113  // No more code to execute so we'll wait for messages from Device\n\n/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/ThingApp_Imp_Dice_MMA8452Q_Device.nut:\n  442      pollMMA8452QBusy = true // mark as busy\n  443      if (hardware.pin1.read() == 1) { // only react to low to high edge\n  444: //FIXME:  do we need to check status for data ready in all xyz?//log(format(\"STATUS == 0x%02x\", readReg(STATUS)))\n  445          reg = readReg(INT_SOURCE)\n  446          while (reg != 0x00) {\n  ...\n  506  // no in and out []s anymore, using Agent messages\n  507  \n  508: // Send status to know we are alive\n  509: log(\"BOOTING  \" + versionString + \" \" + hardware.getimpeeid() + \"/\" + imp.getmacaddress())\n  510: log(\"imp software version : \" + imp.getsoftwareversion())\n  511  \n  512  // roll every time we boot just for some debug status\n  ...\n  519  while(lastUTCSeconds == time()) {\n  520  }\n  521: offsetMilliseconds = hardware.millis() % 1000\n  522: log(\"offsetMilliseconds = \" + offsetMilliseconds)\n  523: log(timestamp(),40)\n  524: \n  525: log(format(\"lastUTCSeconds = %013u\", lastUTCSeconds))\n  526: //log(format(\"lastUTCSeconds = %013u\", lastUTCSeconds * 1000.0))\n  527: \n  528: log(\"powersave = \" + imp.getpowersave())\n  529  // Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.\n  530  hardware.pin1.configure(DIGITAL_IN_WAKEUP, pollMMA8452Q)\n\n/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/ThingApp_Imp_Soda_Device.nut:\n  103  // no in and out []s anymore, using Agent messages\n  104  \n  105: // Send status to know we are alive\n  106: log(\"BOOTING  \" + versionString + \" \" + hardware.getimpeeid() + \"/\" + imp.getmacaddress())\n  107: log(\"imp software version : \" + imp.getsoftwareversion())\n  108  \n  109  // BUGBUG: below needed until newer firmware!?  See http://forums.electricimp.com/discussion/comment/4875#Comment_2714\n  ...\n  113  while(lastUTCSeconds == time()) {\n  114  }\n  115: offsetMilliseconds = hardware.millis() % 1000\n  116: log(\"offsetMilliseconds = \" + offsetMilliseconds)\n  117: \n  118: log(\"powersave = \" + imp.getpowersave())\n  119  // Configure pin1 for wakeup.  Connect MMA8452Q INT2 pin to imp pin1.\n  120  hardware.pin1.configure(DIGITAL_IN_WAKEUP, wakeup)\n\n17 matches across 3 files\n",
-			"settings":
-			{
-				"buffer_size": 2866,
-				"line_ending": "Unix",
-				"name": "Find Results",
-				"scratch": true
 			}
 		}
 	],
@@ -94,6 +76,8 @@
 	},
 	"file_history":
 	[
+		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/CloudApp_Imp_Soda_Agent.nut",
+		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/ThingApp_Imp_Soda_Device.nut",
 		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/Sample_MMA8452Q_Device.nut",
 		"/Users/duppy/Dropbox/TechShop/Cloud Dice/3Dprint/case0bin.jsCAD.js",
 		"/Users/duppy/Documents/GitHub/ElectricDice_ThingApp/ElectricImp_Dice/CloudApp_Imp_Dice_MMA8452Q_Agent.nut",
@@ -133,6 +117,14 @@
 		"case_sensitive": false,
 		"find_history":
 		[
+			"100",
+			"300",
+			"50",
+			"128",
+			"350",
+			"getFaceValueFromAccelData",
+			"readAccelData",
+			"getFaceValueFromAccelData",
 			"CTRL_REG4",
 			"CTRL_REG1",
 			"CTRL_REG2",
@@ -241,8 +233,8 @@
 						"selection":
 						[
 							[
-								1150,
-								1150
+								57,
+								57
 							]
 						],
 						"settings":
@@ -260,23 +252,23 @@
 			]
 		},
 		{
-			"selected": 1,
+			"selected": 0,
 			"sheets":
 			[
 				{
 					"buffer": 1,
-					"file": "CloudApp_Imp_Soda_Agent.nut",
+					"file": "ThingApp_Imp_Dice_MMA8452Q_Device.nut",
 					"settings":
 					{
-						"buffer_size": 4121,
+						"buffer_size": 21286,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								3652,
-								3652
+								0,
+								21286
 							]
 						],
 						"settings":
@@ -286,208 +278,7 @@
 							"translate_tabs_to_spaces": true
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"type": "text"
-				},
-				{
-					"buffer": 2,
-					"file": "ThingApp_Imp_Soda_Device.nut",
-					"settings":
-					{
-						"buffer_size": 4811,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								1101,
-								1101
-							]
-						],
-						"settings":
-						{
-							"rulers":
-							[
-								80
-							],
-							"syntax": "Packages/Squirrel/Squirrel.tmLanguage",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true,
-							"word_wrap": true,
-							"wrap_width": 80
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"type": "text"
-				},
-				{
-					"buffer": 3,
-					"settings":
-					{
-						"buffer_size": 2866,
-						"regions":
-						{
-							"match":
-							{
-								"flags": 112,
-								"regions":
-								[
-									[
-										251,
-										256
-									],
-									[
-										258,
-										263
-									],
-									[
-										300,
-										305
-									],
-									[
-										307,
-										312
-									],
-									[
-										361,
-										366
-									],
-									[
-										368,
-										373
-									],
-									[
-										404,
-										409
-									],
-									[
-										411,
-										416
-									],
-									[
-										519,
-										524
-									],
-									[
-										526,
-										531
-									],
-									[
-										970,
-										975
-									],
-									[
-										1212,
-										1217
-									],
-									[
-										1219,
-										1224
-									],
-									[
-										1310,
-										1315
-									],
-									[
-										1317,
-										1322
-									],
-									[
-										1553,
-										1558
-									],
-									[
-										1560,
-										1565
-									],
-									[
-										1610,
-										1615
-									],
-									[
-										1617,
-										1622
-									],
-									[
-										1645,
-										1650
-									],
-									[
-										1652,
-										1657
-									],
-									[
-										1715,
-										1720
-									],
-									[
-										1786,
-										1791
-									],
-									[
-										1793,
-										1798
-									],
-									[
-										2184,
-										2189
-									],
-									[
-										2191,
-										2196
-									],
-									[
-										2282,
-										2287
-									],
-									[
-										2289,
-										2294
-									],
-									[
-										2590,
-										2595
-									],
-									[
-										2597,
-										2602
-									],
-									[
-										2655,
-										2660
-									],
-									[
-										2662,
-										2667
-									]
-								],
-								"scope": ""
-							}
-						},
-						"selection":
-						[
-							[
-								261,
-								261
-							]
-						],
-						"settings":
-						{
-							"detect_indentation": false,
-							"output_tag": 1,
-							"result_base_dir": "",
-							"result_file_regex": "^([A-Za-z\\\\/<].*):$",
-							"result_line_regex": "^ +([0-9]+):",
-							"scroll_past_end": true,
-							"syntax": "Packages/Default/Find Results.hidden-tmLanguage"
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 8748.0,
 						"zoom_level": 1.0
 					},
 					"type": "text"
